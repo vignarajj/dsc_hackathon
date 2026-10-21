@@ -6,7 +6,7 @@ This is a small tool for a messy real-world image: a photographed form, a handwr
 
 ## What you can do
 
-1. Choose a JPEG or PNG up to 10 MB.
+1. Choose or drop a JPEG or PNG up to 10 MB.
 2. Wait while the image is read. A request can take up to a minute.
 3. Compare the original with the overlay. Each kind of region has its own color.
 4. Copy the cleaned text, or download `<name>.cleaned.md`.

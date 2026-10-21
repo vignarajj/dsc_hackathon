@@ -1,21 +1,37 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f3efe6;
+  --foreground: #1c1915;
+  --paper: #faf7f1;
+  --line: #e3d9c8;
+  --muted: #6e675e;
+  --stamp: #8c2f2d;
+  --stamp-ink: #faf7f1;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-paper: var(--paper);
+  --color-line: var(--line);
+  --color-muted: var(--muted);
+  --color-stamp: var(--stamp);
+  --color-stamp-ink: var(--stamp-ink);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-fraunces);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #12110f;
+    --foreground: #f3efe6;
+    --paper: #1c1a17;
+    --line: #3a342c;
+    --muted: #b7aea2;
+    --stamp: #e4b7ae;
+    --stamp-ink: #1c1915;
   }
 }
 
@@ -23,4 +39,28 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+.reading-bar {
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--stamp), transparent);
+  background-size: 40% 100%;
+  background-repeat: no-repeat;
+  animation: reading 1.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reading-bar {
+    animation: none;
+    background: var(--stamp);
+  }
+}
+
+@keyframes reading {
+  0% {
+    background-position: -40% 0;
+  }
+  100% {
+    background-position: 140% 0;
+  }
 }
