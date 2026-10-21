@@ -1,0 +1,1 @@
+"""Document screenshot cleaner backend."""
