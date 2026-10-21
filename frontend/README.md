@@ -24,7 +24,9 @@ Open http://localhost:3000. The page calls `http://127.0.0.1:8000` unless `NEXT_
 
 JPEG and PNG only, up to 10 MB. A backend 413 or 502 message is shown on the page. A request can take up to a minute.
 
-A 77 second recording of the happy path is at `../demo/happy-path.webm`. It uploads an invoice, a handwritten note, and a chat screenshot.
+The page lists the steps, shows the original beside the SAM overlay, and names the mask colors. Copy puts the cleaned text on the clipboard. Download saves `<name>.cleaned.md`.
+
+A 67 second recording of the polished page is at `../demo/final-demo.webm`. The earlier happy path is at `../demo/happy-path.webm`.
 
 ## Tests
 

@@ -7,12 +7,13 @@ from PIL import Image, ImageDraw, ImageOps
 from dsc_backend.errors import PipelineError
 from dsc_backend.regions import Region
 
-# Fills are RGBA. Outlines are opaque so a boxes-only fallback stays visible.
+# Fills are RGBA. Rectangle is lighter so document text stays readable.
+# The upload page legend uses these same RGB values.
 _FILL = {
-    "stamp": (220, 38, 38, 110),
-    "signature": (37, 99, 235, 110),
-    "photograph": (234, 88, 12, 110),
-    "rectangle": (22, 163, 74, 90),
+    "stamp": (220, 38, 38, 96),
+    "signature": (37, 99, 235, 96),
+    "photograph": (234, 88, 12, 96),
+    "rectangle": (22, 163, 74, 56),
 }
 _OUTLINE = {
     "stamp": (185, 28, 28, 255),
@@ -78,7 +79,13 @@ def render_overlay(image: Image.Image, regions: list[Region]) -> bytes:
         layer.paste(scaled, (region.x, region.y), scaled)
 
     composed = Image.alpha_composite(base, layer)
-    stroke = 2 if min(base.size) >= 16 else 1
+    shortest = min(base.size)
+    if shortest >= 64:
+        stroke = 3
+    elif shortest >= 16:
+        stroke = 2
+    else:
+        stroke = 1
     draw = ImageDraw.Draw(composed)
     for region in regions:
         outline = _OUTLINE.get(region.label, _DEFAULT_OUTLINE)

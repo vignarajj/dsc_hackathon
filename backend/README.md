@@ -49,9 +49,12 @@ working image with no masks. That is a successful response.
 4. Decode each stream with `meta-sam-parser` and paste the mask at the box
    origin, scaled to the box. A box whose mask cannot be decoded is still drawn
    as an outline.
-5. Transcribe the whole image with `muse-spark-1.3`, then proofread that text
+5. Draw a light colored fill and a thicker outline on larger images. Rectangle
+   fills stay lighter than stamps so the page text remains readable. The upload
+   page legend uses the same colors.
+6. Transcribe the whole image with `muse-spark-1.3`, then proofread that text
    with the same model. `MUSE_TEXT_MODEL` can be set to `muse-wonder-1.0`.
-6. Each Meta call has a 60 second timeout and no retries. Timeout or upstream
+7. Each Meta call has a 60 second timeout and no retries. Timeout or upstream
    failure is HTTP 502 with `{"detail": "..."}`.
 
 CORS allows `http://localhost:3000` and `http://127.0.0.1:3000` only.

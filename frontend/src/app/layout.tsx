@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Document screenshot cleaner",
-  description: "Segment a screenshot with SAM and clean the transcribed text with Muse.",
+  description: "Segment a screenshot with SAM 3.1 and clean the transcribed text with Muse Spark.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
