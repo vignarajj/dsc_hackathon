@@ -220,8 +220,8 @@ graphics, noise). The `§3.1` contract is unchanged — boxes + overlay PNG.
 
 ## 6. Submission Checklist
 
-- [ ] Core upload → result flow works
-- [ ] 60–90 second demo video recorded
+- [x] Core upload → result flow works
+- [x] 60–90 second demo video recorded
 - [ ] Clear mention of SAM 3.1 + Muse usage
 - [ ] Project hosted or GitHub link ready
 - [ ] Submitted on Cerebral Valley portal before **4 November, 9:00 PM ET**
@@ -236,8 +236,8 @@ Update `Status` as work progresses. Allowed values: `Not Started` →
 | Phase | Work item | Ref | Status | Tests | Docs | Commit | Notes |
 |-------|-----------|-----|--------|-------|------|--------|-------|
 | 0 | API spike: verify SAM + Muse contract | §4 Phase 0, §9 Q1–Q3 | Done | No | No | No | Contract verified on real images; scripts in /tmp, not committed |
-| 1 | Backend pipeline: `/api/process` + overlay | §4 Phase 1, §3.1 | Done | Yes | Yes | Yes | Mocked contract tests pass. Live Meta call still needs `backend/.env`. Concepts: stamp, signature, photograph, rectangle. |
-| 2 | Next.js upload page + rough demo video | §4 Phase 2 | In Progress | Yes | Yes | Yes | Upload page is in `frontend/` and checked in Chrome against a stand-in API. Deploy stays local. Demo video and live sample images still need `META_API_KEY`. |
+| 1 | Backend pipeline: `/api/process` + overlay | §4 Phase 1, §3.1 | Done | Yes | Yes | Yes | Mocked contract tests pass. Live Meta call confirmed in Phase 2. Concepts: stamp, signature, photograph, rectangle. |
+| 2 | Next.js upload page + rough demo video | §4 Phase 2 | Done | Yes | Yes | Yes | Chrome against the live API: invoice, handwritten note, chat, mobile UI. Demo is `demo/happy-path.webm` (77s). Deploy stays local. |
 | 3 | Polish, README, final video + submission | §4 Phase 3, §6 | Not Started | No | No | No | Max 1–2 extras |
 
 ---
@@ -257,8 +257,8 @@ Update `Status` as work progresses. Allowed values: `Not Started` →
 
 ## 8. Immediate Next Steps
 
-1. Put `META_API_KEY` in `backend/.env` and run one real screenshot through the upload page.
-2. Record the 60–90 second demo video of that happy path.
+1. Phase 3 polish is next: copy and download, usage instructions, and a cleaner layout. Pick at most one or two extras.
+2. Push the demo commit yourself. The GitHub repo is private, so judges cannot open it until it is public or they are invited.
 3. Deploy target is still local. Pick Vercel and Railway only if the demo needs a public URL.
 
 ---

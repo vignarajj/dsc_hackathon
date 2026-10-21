@@ -24,6 +24,8 @@ Open http://localhost:3000. The page calls `http://127.0.0.1:8000` unless `NEXT_
 
 JPEG and PNG only, up to 10 MB. A backend 413 or 502 message is shown on the page. A request can take up to a minute.
 
+A 77 second recording of the happy path is at `../demo/happy-path.webm`. It uploads an invoice, a handwritten note, and a chat screenshot.
+
 ## Tests
 
 ```bash
