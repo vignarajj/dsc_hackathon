@@ -65,3 +65,5 @@ uv run ruff format --check .
 ```
 
 The test suite mocks the model gateway. It does not call Meta.
+
+The upload page lives in `frontend/`. See `frontend/README.md`.

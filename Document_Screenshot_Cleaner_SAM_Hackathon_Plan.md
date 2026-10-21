@@ -237,7 +237,7 @@ Update `Status` as work progresses. Allowed values: `Not Started` →
 |-------|-----------|-----|--------|-------|------|--------|-------|
 | 0 | API spike: verify SAM + Muse contract | §4 Phase 0, §9 Q1–Q3 | Done | No | No | No | Contract verified on real images; scripts in /tmp, not committed |
 | 1 | Backend pipeline: `/api/process` + overlay | §4 Phase 1, §3.1 | Done | Yes | Yes | Yes | Mocked contract tests pass. Live Meta call still needs `backend/.env`. Concepts: stamp, signature, photograph, rectangle. |
-| 2 | Next.js upload page + rough demo video | §4 Phase 2 | Not Started | No | No | No | Decide deploy target before starting |
+| 2 | Next.js upload page + rough demo video | §4 Phase 2 | In Progress | Yes | Yes | Yes | Upload page is in `frontend/` and checked in Chrome against a stand-in API. Deploy stays local. Demo video and live sample images still need `META_API_KEY`. |
 | 3 | Polish, README, final video + submission | §4 Phase 3, §6 | Not Started | No | No | No | Max 1–2 extras |
 
 ---
@@ -257,9 +257,9 @@ Update `Status` as work progresses. Allowed values: `Not Started` →
 
 ## 8. Immediate Next Steps
 
-1. Put `META_API_KEY` in `backend/.env` and run one real screenshot through `POST /api/process`.
-2. Start Phase 2: Next.js upload page against the §3.1 contract.
-3. Decide the deploy target before wiring the frontend.
+1. Put `META_API_KEY` in `backend/.env` and run one real screenshot through the upload page.
+2. Record the 60–90 second demo video of that happy path.
+3. Deploy target is still local. Pick Vercel and Railway only if the demo needs a public URL.
 
 ---
 
