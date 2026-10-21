@@ -2,7 +2,7 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, File, Request, UploadFile
+from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from dsc_backend.config import Settings, load_settings
 from dsc_backend.errors import PipelineError
 from dsc_backend.meta import MetaGateway, OpenAIGateway
-from dsc_backend.pipeline import ProcessResult, process_image
+from dsc_backend.pipeline import ProcessResult, concepts_for_request, process_image
 
 logger = logging.getLogger("dsc")
 
@@ -64,15 +64,21 @@ def create_app(
         return {"status": "ok"}
 
     @app.post("/api/process", response_model=ProcessResponse)
-    async def process(request: Request, image: UploadFile = File(...)) -> ProcessResult:
+    async def process(
+        request: Request,
+        image: UploadFile = File(...),
+        concepts: str | None = Form(default=None),
+    ) -> ProcessResult:
         settings_for_request: Settings = request.app.state.settings
         content_type = image.content_type or ""
         image_bytes = await _read_upload(image, settings_for_request.max_upload_bytes)
+        selected = concepts_for_request(concepts, settings_for_request.sam_concepts)
         return await process_image(
             image_bytes,
             content_type,
             request.app.state.gateway,
             settings_for_request,
+            selected,
         )
 
     return app

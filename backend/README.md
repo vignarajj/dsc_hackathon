@@ -17,9 +17,11 @@ The process refuses to start when `META_API_KEY` is missing.
 
 - `GET http://127.0.0.1:8000/api/health` → `{"status":"ok"}`
 - `POST http://127.0.0.1:8000/api/process` with multipart field `image`
+- Optional multipart field `concepts`, a comma-separated list. Omit it to use `SAM_CONCEPTS`.
 
 ```bash
 curl -s -F "image=@note.png;type=image/png" http://127.0.0.1:8000/api/process
+curl -s -F "image=@note.png;type=image/png" -F "concepts=rectangle" http://127.0.0.1:8000/api/process
 ```
 
 ## Response
@@ -43,9 +45,13 @@ working image with no masks. That is a successful response.
 2. Apply EXIF orientation, then shrink the long edge to 2048 px when needed.
    SAM, Muse, and the overlay all use that working image, so the boxes match
    the picture the browser will show.
-3. Call `sam-3.1` once per concept, in parallel, with `stream: true`. Concepts
-   are `stamp`, `signature`, `photograph`, and `rectangle`. Text prompts are
-   omitted because the Phase 0 spike showed they return no matches.
+3. Call `sam-3.1` once per selected concept, in parallel, with `stream: true`.
+   The optional `concepts` field accepts `stamp`, `signature`, `photograph`,
+   and `rectangle`. Names are matched without regard to case, duplicates are
+   ignored, and the order is always that list. An empty field skips
+   segmentation. An unknown name is HTTP 400 and no model is called. When the
+   field is absent, `SAM_CONCEPTS` is used. Text prompts are omitted because
+   the Phase 0 spike showed they return no matches.
 4. Decode each stream with `meta-sam-parser` and paste the mask at the box
    origin, scaled to the box. A box whose mask cannot be decoded is still drawn
    as an outline.
@@ -54,8 +60,9 @@ working image with no masks. That is a successful response.
    page legend uses the same colors.
 6. Transcribe the whole image with `muse-spark-1.3`, then proofread that text
    with the same model. `MUSE_TEXT_MODEL` can be set to `muse-wonder-1.0`.
-7. Each Meta call has a 60 second timeout and no retries. Timeout or upstream
-   failure is HTTP 502 with `{"detail": "..."}`.
+7. Each Meta call has a 60 second timeout. This service does not retry a model
+   call. Timeout or upstream failure is HTTP 502 with `{"detail": "..."}`.
+   The upload page can send the same image again as a new request.
 
 CORS allows `http://localhost:3000` and `http://127.0.0.1:3000` only.
 

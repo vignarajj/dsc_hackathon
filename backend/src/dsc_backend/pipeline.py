@@ -3,7 +3,7 @@ import base64
 import logging
 from dataclasses import dataclass
 
-from dsc_backend.config import Settings
+from dsc_backend.config import DEFAULT_CONCEPTS, Settings
 from dsc_backend.errors import PipelineError
 from dsc_backend.imaging import prepare_image, render_overlay
 from dsc_backend.meta import MetaGateway
@@ -29,18 +29,43 @@ class ProcessResult:
     cleaned_text: str
 
 
+def concepts_for_request(raw: str | None, default: tuple[str, ...]) -> tuple[str, ...]:
+    """Turn the form field into SAM prompts.
+
+    A missing field uses the server default. An empty field segments nothing.
+    Names outside the known four are rejected so the client cannot invent prompts.
+    """
+    if raw is None:
+        return default
+    allowed = set(DEFAULT_CONCEPTS)
+    chosen: set[str] = set()
+    for part in raw.split(","):
+        name = part.strip().lower()
+        if not name:
+            continue
+        if name not in allowed:
+            raise PipelineError(
+                400,
+                "Unknown region. Choose stamp, signature, photograph, or rectangle.",
+            )
+        chosen.add(name)
+    return tuple(concept for concept in DEFAULT_CONCEPTS if concept in chosen)
+
+
 async def process_image(
     image_bytes: bytes,
     content_type: str,
     gateway: MetaGateway,
     settings: Settings,
+    concepts: tuple[str, ...] | None = None,
 ) -> ProcessResult:
     prepared = prepare_image(image_bytes, content_type, settings.max_image_edge)
+    selected = settings.sam_concepts if concepts is None else concepts
     try:
         async with asyncio.TaskGroup() as group:
             segment_tasks = [
                 group.create_task(gateway.segment(prepared.data_url, concept))
-                for concept in settings.sam_concepts
+                for concept in selected
             ]
             transcript_task = group.create_task(gateway.transcribe(prepared.data_url))
     except ExceptionGroup as group:
@@ -51,7 +76,8 @@ async def process_image(
     cleaned_text = await _proofread(gateway, original_text)
     overlay = render_overlay(prepared.image, regions)
     logger.info(
-        "processed boxes=%s text_chars=%s",
+        "processed concepts=%s boxes=%s text_chars=%s",
+        ",".join(selected) or "-",
         len(regions),
         len(original_text),
     )

@@ -1,15 +1,16 @@
 # Document screenshot cleaner
 
-Upload one screenshot or photo of a page. The app marks stamps, signatures, photographs, and rectangles, transcribes the visible text, and proofreads it. You get the original picture, a colored overlay, and the cleaned text. You can copy that text or download it as Markdown.
+Upload one screenshot or photo of a page. The app marks the regions you leave on — stamps, signatures, photographs, and rectangles — transcribes the visible text, and proofreads it. You get the original picture, a colored overlay, and the cleaned text beside the transcription, with the edits marked. You can copy that text or download it as Markdown. If a read fails, you can send the same image again.
 
 This is a small tool for a messy real-world image: a photographed form, a handwritten note, a chat, or a phone screen. It was built for the Meta Global AI Developer Hackathon, Indie track, on the theme Build for Your World.
 
 ## What you can do
 
 1. Choose or drop a JPEG or PNG up to 10 MB.
-2. Wait while the image is read. A request can take up to a minute.
-3. Compare the original with the overlay. Each kind of region has its own color.
-4. Copy the cleaned text, or download `<name>.cleaned.md`.
+2. Leave on the regions you want marked. All four start on.
+3. Wait while the image is read. A request can take up to a minute. If it fails and the file is still selected, press Try again. That sends the image once more. The API does not retry a call on its own.
+4. Compare the original with the overlay. Each kind of region has its own color. Changing the region boxes after a result does not send a new request until you clean again.
+5. Read the transcription beside the proofread. Struck-through words were in the transcription. Underlined words are the proofread wording. When nothing changed, the page says so. Copy the cleaned text, or download `<name>.cleaned.md`. Copy and download use the proofread text. They stay off when that text is empty.
 
 An image with no matching regions is still a success. The overlay is the picture with no masks, and the text is whatever was read from the page. If the page has no text, the screen says so and the copy and download buttons stay off.
 
@@ -19,7 +20,7 @@ An image with no matching regions is still a success. The overlay is the picture
 |---|---|
 | `backend/` | FastAPI service. Accepts the image, calls the models, and draws the overlay. |
 | `frontend/` | Next.js page. Uploads the image and shows the result. |
-| `demo/final-demo.webm` | 67 second walkthrough of the polished page. |
+| `demo/final-demo.webm` | 67 second walkthrough of the polished page, recorded before region choices, the proofread comparison, and Try again. |
 | `demo/happy-path.webm` | 77 second earlier recording of the first working page. |
 | `Document_Screenshot_Cleaner_SAM_Hackathon_Plan.md` | The execution plan and phase tracker. |
 
@@ -31,10 +32,10 @@ The browser sends the file to `POST /api/process`. The API does not trust the br
 
 1. It accepts only JPEG or PNG, up to 10 MB. Anything else is HTTP 400. A larger file is HTTP 413.
 2. It applies EXIF orientation, then shrinks the long edge to 2048 px when needed. Segmentation, transcription, and the overlay all use that same working image, so the boxes line up with the picture on the page.
-3. It asks SAM 3.1, in parallel, for `stamp`, `signature`, `photograph`, and `rectangle`. Prompts for text, a document, or a handwritten note are not sent. Those returned no regions in the early spike. Text comes from a full-image transcription, not from the regions.
+3. It asks SAM 3.1, in parallel, for the regions in the `concepts` form field. The known names are `stamp`, `signature`, `photograph`, and `rectangle`, always stored in that order. Omit the field and the server uses `SAM_CONCEPTS`, which defaults to all four. Send the field empty and segmentation is skipped, while transcription still runs. An unknown name is HTTP 400. Prompts for text, a document, or a handwritten note are not sent. Those returned no regions in the early spike. Text comes from a full-image transcription, not from the regions.
 4. It decodes each SAM stream with `meta-sam-parser` and paints the mask at the box. A box whose mask cannot be decoded is still outlined. Rectangle fills are lighter than stamps so the words underneath stay readable.
 5. It transcribes the whole image with Muse Spark (`muse-spark-1.3`), then proofreads that text with the same model. An empty transcription is not proofread.
-6. Each model call has a 60 second timeout and is not retried. A timeout or an upstream failure is HTTP 502 with a short `detail` string, and the page shows that string.
+6. Each model call has a 60 second timeout and is not retried by the API. A timeout or an upstream failure is HTTP 502 with a short `detail` string, and the page shows that string. Try again starts a new request with the same file and the regions currently checked.
 
 The response looks like this:
 
@@ -96,7 +97,7 @@ Optional values in `backend/.env`:
 | `SAM_MODEL` | `sam-3.1` |
 | `MUSE_VISION_MODEL` | `muse-spark-1.3` |
 | `MUSE_TEXT_MODEL` | `muse-spark-1.3` |
-| `SAM_CONCEPTS` | `stamp,signature,photograph,rectangle` |
+| `SAM_CONCEPTS` | `stamp,signature,photograph,rectangle` (used when the request omits `concepts`) |
 | `CORS_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` |
 | `UPSTREAM_TIMEOUT_SECONDS` | `60` |
 

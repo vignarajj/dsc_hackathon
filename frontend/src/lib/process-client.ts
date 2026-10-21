@@ -16,7 +16,14 @@ export type ProcessResponse = {
   cleaned_text: string;
 };
 
+export const REGION_CONCEPTS = ["stamp", "signature", "photograph", "rectangle"] as const;
+
 const ACCEPTED_TYPES = new Set(["image/jpeg", "image/jpg", "image/png"]);
+
+export type ProcessRequest = {
+  concepts?: readonly string[];
+  fetchImpl?: typeof fetch;
+};
 
 export function validateImageFile(file: { type: string; size: number }): string | null {
   const mediaType = file.type.split(";", 1)[0]?.trim().toLowerCase() ?? "";
@@ -70,18 +77,25 @@ export function parseProcessResponse(body: unknown): ProcessResponse {
   };
 }
 
+export function conceptsField(concepts: readonly string[] | undefined): string {
+  const source = concepts ?? REGION_CONCEPTS;
+  return REGION_CONCEPTS.filter((concept) => source.includes(concept)).join(",");
+}
+
 export async function processImage(
   file: File,
   apiBase: string,
-  fetchImpl: typeof fetch = fetch,
+  request: ProcessRequest = {},
 ): Promise<ProcessResponse> {
   const problem = validateImageFile(file);
   if (problem) {
     throw new Error(problem);
   }
+  const fetchImpl = request.fetchImpl ?? fetch;
 
   const body = new FormData();
   body.append("image", file);
+  body.append("concepts", conceptsField(request.concepts));
   const endpoint = `${apiBase.replace(/\/$/, "")}/api/process`;
 
   let response: Response;

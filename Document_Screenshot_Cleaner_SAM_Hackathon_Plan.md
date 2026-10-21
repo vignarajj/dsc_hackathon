@@ -177,6 +177,8 @@ mocked gateway. The live call still needs `META_API_KEY` in `backend/.env`.
 
 **Done when:** Final demo video and submission materials are ready.
 
+**Added after the demo:** the page shows the proofread edits against the transcription, checkboxes turn SAM regions on and off, and Try again resubmits the same file after a failed read. Overlay download, fact-checking, and mask-based background removal were not added. The demo videos predate these three controls.
+
 ---
 
 ## 5. AI Models & Tools
@@ -239,6 +241,7 @@ Update `Status` as work progresses. Allowed values: `Not Started` →
 | 1 | Backend pipeline: `/api/process` + overlay | §4 Phase 1, §3.1 | Done | Yes | Yes | Yes | Mocked contract tests pass. Live Meta call confirmed in Phase 2. Concepts: stamp, signature, photograph, rectangle. |
 | 2 | Next.js upload page + rough demo video | §4 Phase 2 | Done | Yes | Yes | Yes | Chrome against the live API: invoice, handwritten note, chat, mobile UI. Demo is `demo/happy-path.webm` (77s). Deploy stays local. |
 | 3 | Polish, README, final video + submission | §4 Phase 3, §6 | Done | Yes | Yes | Yes | Lighter rectangle masks, usage steps, copy, and Markdown download. Final demo is `demo/final-demo.webm` (67s). Fact-checking and background removal were not added. Portal submission is still open. |
+| 3b | Proofread diff, region toggles, retry | Added after §4 Phase 3 | Done | Yes | Yes | Yes | Page shows transcription against proofread text. `concepts` selects stamp, signature, photograph, rectangle. Try again sends a new request. Overlay download was not added. |
 
 ---
 
@@ -257,7 +260,7 @@ Update `Status` as work progresses. Allowed values: `Not Started` →
 
 ## 8. Immediate Next Steps
 
-1. Push the Phase 3 commit if you want it on GitHub. The repo is still private.
+1. The page shows proofread edits, region checkboxes, and Try again. Overlay download was not added. The demo videos predate those controls. The repo is still private.
 2. Make the repo public, or invite the judges, before you rely on the GitHub link.
 3. Submit on the Cerebral Valley portal yourself. Deploy stays local unless the demo needs a public URL.
 

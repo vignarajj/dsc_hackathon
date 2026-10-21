@@ -1,25 +1,40 @@
 "use client";
 
-import { useEffect, useState, type DragEvent, type FormEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
 
 import { cleanedMarkdownName, markdownForCleanedText } from "@/lib/cleaned-text";
-import { processImage, type ProcessResponse, validateImageFile } from "@/lib/process-client";
+import {
+  REGION_CONCEPTS,
+  conceptsField,
+  processImage,
+  type ProcessResponse,
+  validateImageFile,
+} from "@/lib/process-client";
+import { textChanges, type TextChange } from "@/lib/text-diff";
 
 type Status = "idle" | "loading" | "done" | "error";
+type RegionId = (typeof REGION_CONCEPTS)[number];
 
-const MASK_LEGEND = [
-  { label: "Stamp", swatch: "#dc2626" },
-  { label: "Signature", swatch: "#2563eb" },
-  { label: "Photograph", swatch: "#ea580c" },
-  { label: "Rectangle", swatch: "#16a34a" },
-] as const;
+const REGION_LABELS: Record<RegionId, { label: string; swatch: string }> = {
+  stamp: { label: "Stamp", swatch: "#dc2626" },
+  signature: { label: "Signature", swatch: "#2563eb" },
+  photograph: { label: "Photograph", swatch: "#ea580c" },
+  rectangle: { label: "Rectangle", swatch: "#16a34a" },
+};
 
 const STEPS = [
   "Choose a JPEG or PNG up to 10 MB. A page photo, a chat, or a phone screenshot all work.",
-  "Press Clean screenshot. Reading the image can take up to a minute.",
+  "Leave on the regions you want marked, then press Clean screenshot. Reading the image can take up to a minute.",
   "Compare the original with the overlay. Each kind of region has its own color.",
-  "Copy the cleaned text, or download it as Markdown.",
+  "Read the transcription beside the proofread. Copy the cleaned text, or download it as Markdown.",
 ] as const;
+
+const ALL_REGIONS: Record<RegionId, boolean> = {
+  stamp: true,
+  signature: true,
+  photograph: true,
+  rectangle: true,
+};
 
 export function Cleaner({ apiBase }: { apiBase: string }) {
   const [file, setFile] = useState<File | null>(null);
@@ -29,6 +44,9 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [result, setResult] = useState<ProcessResponse | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [regions, setRegions] = useState<Record<RegionId, boolean>>(ALL_REGIONS);
+  const [appliedConcepts, setAppliedConcepts] = useState<string | null>(null);
+  const inFlight = useRef(false);
 
   useEffect(() => {
     return () => {
@@ -38,9 +56,14 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
     };
   }, [previewUrl]);
 
+  const selected = REGION_CONCEPTS.filter((id) => regions[id]);
+  const selection = conceptsField(selected);
+  const selectionChanged = result !== null && appliedConcepts !== selection;
+
   function chooseFile(next: File | null) {
     setResult(null);
     setNotice(null);
+    setAppliedConcepts(null);
     if (!next) {
       setFile(null);
       setPreviewUrl(null);
@@ -71,23 +94,36 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
     chooseFile(event.dataTransfer.files?.[0] ?? null);
   }
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!file) {
+  function toggleRegion(id: RegionId) {
+    setRegions((current) => ({ ...current, [id]: !current[id] }));
+  }
+
+  async function runClean() {
+    if (!file || inFlight.current) {
       return;
     }
+    const concepts = REGION_CONCEPTS.filter((id) => regions[id]);
+    inFlight.current = true;
     setStatus("loading");
     setError(null);
     setNotice(null);
     setResult(null);
     try {
-      const processed = await processImage(file, apiBase);
+      const processed = await processImage(file, apiBase, { concepts });
       setResult(processed);
+      setAppliedConcepts(conceptsField(concepts));
       setStatus("done");
     } catch (caught) {
       setStatus("error");
       setError(caught instanceof Error ? caught.message : "The model request failed");
+    } finally {
+      inFlight.current = false;
     }
+  }
+
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void runClean();
   }
 
   const cleaned = result?.cleaned_text ?? "";
@@ -139,8 +175,8 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
             A messy page, read cleanly.
           </h1>
           <p className="max-w-md text-[15px] leading-relaxed text-muted">
-            Upload one JPEG or PNG. SAM 3.1 marks stamps, signatures, photos, and rectangles.
-            Muse Spark transcribes the page and proofreads the text.
+            Upload one JPEG or PNG. Choose which regions SAM 3.1 marks. Muse Spark transcribes
+            the page, proofreads the text, and the page shows what changed.
           </p>
         </div>
 
@@ -194,6 +230,38 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
             className="sr-only"
           />
         </label>
+
+        <fieldset disabled={status === "loading"} className="flex flex-col gap-3">
+          <legend className="text-sm font-medium">Regions to mark</legend>
+          <div className="flex flex-wrap gap-2">
+            {REGION_CONCEPTS.map((id) => (
+              <label
+                key={id}
+                className="flex items-center gap-2 rounded-full border border-line bg-paper px-3 py-1.5 text-sm has-disabled:opacity-50"
+              >
+                <input
+                  type="checkbox"
+                  value={id}
+                  checked={regions[id]}
+                  onChange={() => toggleRegion(id)}
+                  className="accent-stamp"
+                />
+                <span
+                  className="inline-block h-2.5 w-2.5 rounded-full"
+                  style={{ backgroundColor: REGION_LABELS[id].swatch }}
+                  aria-hidden="true"
+                />
+                {REGION_LABELS[id].label}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        {selectionChanged ? (
+          <p role="status" className="text-sm text-muted">
+            Clean again to apply the region choice.
+          </p>
+        ) : null}
+
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="submit"
@@ -215,12 +283,20 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
       ) : null}
 
       {error ? (
-        <p
-          role="alert"
-          className="mt-6 rounded-2xl border border-stamp/40 bg-paper px-4 py-3 text-sm text-stamp"
-        >
-          {error}
-        </p>
+        <div className="mt-6 flex flex-wrap items-center gap-3 rounded-2xl border border-stamp/40 bg-paper px-4 py-3">
+          <p role="alert" className="text-sm text-stamp">
+            {error}
+          </p>
+          {status === "error" && file ? (
+            <button
+              type="button"
+              onClick={() => void runClean()}
+              className="rounded-full border border-stamp px-4 py-1.5 text-sm font-medium text-stamp"
+            >
+              Try again
+            </button>
+          ) : null}
+        </div>
       ) : null}
 
       {status === "done" && result && previewUrl ? (
@@ -250,51 +326,21 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
             </figure>
           </div>
           <ul className="flex flex-wrap gap-2">
-            {MASK_LEGEND.map((item) => (
+            {REGION_CONCEPTS.map((id) => (
               <li
-                key={item.label}
+                key={id}
                 className="flex items-center gap-2 rounded-full border border-line bg-paper px-3 py-1 text-sm text-muted"
               >
                 <span
                   className="inline-block h-2.5 w-2.5 rounded-full"
-                  style={{ backgroundColor: item.swatch }}
+                  style={{ backgroundColor: REGION_LABELS[id].swatch }}
                   aria-hidden="true"
                 />
-                {item.label}
+                {REGION_LABELS[id].label}
               </li>
             ))}
           </ul>
-          <div className="flex flex-col gap-4 rounded-3xl border border-line bg-paper p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="font-display text-2xl font-normal">Cleaned text</h2>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={copyText}
-                  disabled={!hasText}
-                  className="rounded-full border border-line px-4 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Copy cleaned text
-                </button>
-                <button
-                  type="button"
-                  onClick={downloadText}
-                  disabled={!hasText}
-                  className="rounded-full border border-line px-4 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Download Markdown
-                </button>
-                {notice ? (
-                  <span role="status" className="text-sm text-muted">
-                    {notice}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-            <pre className="min-h-28 overflow-auto rounded-2xl border border-line bg-background p-4 font-mono text-sm leading-relaxed whitespace-pre-wrap">
-              {hasText ? cleaned : "No text was found in this image."}
-            </pre>
-          </div>
+          <Reading result={result} file={file} notice={notice} onCopy={copyText} onDownload={downloadText} />
         </section>
       ) : null}
 
@@ -304,4 +350,123 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
       </footer>
     </main>
   );
+}
+
+function Reading({
+  result,
+  file,
+  notice,
+  onCopy,
+  onDownload,
+}: {
+  result: ProcessResponse;
+  file: File | null;
+  notice: string | null;
+  onCopy: () => void;
+  onDownload: () => void;
+}) {
+  const cleaned = result.cleaned_text;
+  const hasText = cleaned.trim().length > 0;
+  const unchanged = result.original_text === result.cleaned_text;
+  const changes = unchanged ? [] : textChanges(result.original_text, result.cleaned_text);
+
+  return (
+    <div className="flex flex-col gap-4 rounded-3xl border border-line bg-paper p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="font-display text-2xl font-normal">Cleaned text</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={onCopy}
+            disabled={!hasText}
+            className="rounded-full border border-line px-4 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Copy cleaned text
+          </button>
+          <button
+            type="button"
+            onClick={onDownload}
+            disabled={!hasText || !file}
+            className="rounded-full border border-line px-4 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Download Markdown
+          </button>
+          {notice ? (
+            <span role="status" className="text-sm text-muted">
+              {notice}
+            </span>
+          ) : null}
+        </div>
+      </div>
+      {unchanged ? (
+        <div className="flex flex-col gap-3">
+          {hasText ? <p className="text-sm text-muted">No wording changes.</p> : null}
+          <pre className="min-h-28 overflow-auto rounded-2xl border border-line bg-background p-4 font-mono text-sm leading-relaxed whitespace-pre-wrap">
+            {hasText ? cleaned : "No text was found in this image."}
+          </pre>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-muted">
+            Struck-through words were in the transcription. Underlined words are the proofread
+            wording.
+          </p>
+          <div className="grid items-start gap-4 md:grid-cols-2">
+            <div className="flex flex-col gap-2">
+              <h3 className="text-[11px] font-medium tracking-[0.18em] text-muted uppercase">
+                Transcription
+              </h3>
+              <pre className="min-h-28 overflow-auto rounded-2xl border border-line bg-background p-4 font-mono text-sm leading-relaxed whitespace-pre-wrap">
+                <ChangeSpans changes={changes} show={TRANSCRIPTION} />
+              </pre>
+            </div>
+            <div className="flex flex-col gap-2">
+              <h3 className="text-[11px] font-medium tracking-[0.18em] text-muted uppercase">
+                Proofread
+              </h3>
+              <pre className="min-h-28 overflow-auto rounded-2xl border border-line bg-background p-4 font-mono text-sm leading-relaxed whitespace-pre-wrap">
+                {hasText ? (
+                  <ChangeSpans changes={changes} show={PROOFREAD} />
+                ) : (
+                  "No text was found in this image."
+                )}
+              </pre>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const TRANSCRIPTION = new Set<TextChange["type"]>(["same", "removed"]);
+const PROOFREAD = new Set<TextChange["type"]>(["same", "added"]);
+
+function ChangeSpans({
+  changes,
+  show,
+}: {
+  changes: TextChange[];
+  show: ReadonlySet<TextChange["type"]>;
+}) {
+  return changes.map((change, index) => {
+    if (!show.has(change.type)) {
+      return null;
+    }
+    if (change.type === "removed") {
+      return (
+        <del key={index} className="line-through decoration-stamp decoration-2">
+          {change.text}
+        </del>
+      );
+    }
+    if (change.type === "added") {
+      return (
+        <ins key={index} className="underline decoration-foreground decoration-2 underline-offset-2">
+          {change.text}
+        </ins>
+      );
+    }
+    return <span key={index}>{change.text}</span>;
+  });
 }

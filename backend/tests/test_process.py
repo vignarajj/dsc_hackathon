@@ -153,6 +153,58 @@ def test_upstream_timeout_is_502() -> None:
     assert response.json()["detail"] == "The model request timed out"
 
 
+def test_omitted_concepts_follow_the_server_default() -> None:
+    gateway = FakeGateway()
+    settings = _settings(sam_concepts=("signature", "stamp"))
+    with TestClient(create_app(settings, gateway)) as client:
+        response = client.post(
+            "/api/process",
+            files={"image": ("note.png", _png(), "image/png")},
+        )
+    assert response.status_code == 200
+    assert gateway.concepts == ["signature", "stamp"]
+
+
+def test_requested_concepts_limit_which_regions_are_segmented() -> None:
+    gateway = FakeGateway()
+    with TestClient(create_app(_settings(), gateway)) as client:
+        response = client.post(
+            "/api/process",
+            data={"concepts": " Rectangle, stamp ,STAMP "},
+            files={"image": ("note.png", _png(), "image/png")},
+        )
+    assert response.status_code == 200
+    assert gateway.concepts == ["stamp", "rectangle"]
+    assert [box["label"] for box in response.json()["boxes"]] == ["stamp"]
+
+
+def test_empty_concepts_skip_segmentation_and_still_read_text() -> None:
+    gateway = FakeGateway()
+    with TestClient(create_app(_settings(), gateway)) as client:
+        response = client.post(
+            "/api/process",
+            data={"concepts": " , "},
+            files={"image": ("note.png", _png(), "image/png")},
+        )
+    assert response.status_code == 200
+    assert gateway.concepts == []
+    assert response.json()["boxes"] == []
+    assert response.json()["cleaned_text"] == "Receipt total"
+
+
+def test_unknown_concept_is_rejected() -> None:
+    gateway = FakeGateway()
+    with TestClient(create_app(_settings(), gateway)) as client:
+        response = client.post(
+            "/api/process",
+            data={"concepts": "stamp,logo"},
+            files={"image": ("note.png", _png(), "image/png")},
+        )
+    assert response.status_code == 400
+    assert "rectangle" in response.json()["detail"]
+    assert gateway.concepts == []
+
+
 def test_upstream_pipeline_error_is_preserved() -> None:
     gateway = FakeGateway(fail_with=PipelineError(502, "The model request failed"))
     with TestClient(create_app(_settings(), gateway)) as client:
