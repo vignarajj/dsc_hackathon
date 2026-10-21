@@ -1,6 +1,6 @@
 # Document screenshot cleaner API
 
-Phase 1 backend. It accepts one JPEG or PNG and returns SAM 3.1 boxes, a
+The project overview is in the root [README](../README.md). This service accepts one JPEG or PNG and returns SAM 3.1 boxes, a
 pre-rendered overlay, the Muse transcription, and a proofread copy of that text.
 
 ## Run

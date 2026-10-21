@@ -1,6 +1,6 @@
 # Document screenshot cleaner UI
 
-Upload page for the Phase 1 API. It posts the image to `POST /api/process` and shows the original, the SAM overlay, and the cleaned text.
+Upload page for the API. The project overview is in the root [README](../README.md). This page posts the image to `POST /api/process` and shows the original, the SAM overlay, and the cleaned text.
 
 ## Run
 
