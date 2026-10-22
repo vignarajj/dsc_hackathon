@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
 
-import { cleanedMarkdownName, markdownForCleanedText } from "@/lib/cleaned-text";
+import { cleanedMarkdownName, markdownForCleanedText, overlayPngName } from "@/lib/cleaned-text";
 import {
+  CancelledError,
   REGION_CONCEPTS,
   conceptsField,
   processImage,
   type ProcessResponse,
+  regionCounts,
   validateImageFile,
 } from "@/lib/process-client";
 import { textChanges, type TextChange } from "@/lib/text-diff";
@@ -46,7 +48,9 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
   const [dragging, setDragging] = useState(false);
   const [regions, setRegions] = useState<Record<RegionId, boolean>>(ALL_REGIONS);
   const [appliedConcepts, setAppliedConcepts] = useState<string | null>(null);
-  const inFlight = useRef(false);
+  const inFlight = useRef<AbortController | null>(null);
+
+  useEffect(() => () => inFlight.current?.abort(), []);
 
   useEffect(() => {
     return () => {
@@ -103,22 +107,35 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
       return;
     }
     const concepts = REGION_CONCEPTS.filter((id) => regions[id]);
-    inFlight.current = true;
+    const controller = new AbortController();
+    inFlight.current = controller;
     setStatus("loading");
     setError(null);
     setNotice(null);
     setResult(null);
     try {
-      const processed = await processImage(file, apiBase, { concepts });
+      const processed = await processImage(file, apiBase, {
+        concepts,
+        signal: controller.signal,
+      });
       setResult(processed);
       setAppliedConcepts(conceptsField(concepts));
       setStatus("done");
     } catch (caught) {
+      if (caught instanceof CancelledError) {
+        setStatus("idle");
+        return;
+      }
       setStatus("error");
       setError(caught instanceof Error ? caught.message : "The model request failed");
     } finally {
-      inFlight.current = false;
+      inFlight.current = null;
     }
+  }
+
+  function cancelClean() {
+    // The page stops waiting. A model call already under way still finishes on the server.
+    inFlight.current?.abort();
   }
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -160,13 +177,28 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
     URL.revokeObjectURL(url);
   }
 
+  function downloadOverlay() {
+    if (!result || !file) {
+      return;
+    }
+    const anchor = document.createElement("a");
+    anchor.href = `data:image/png;base64,${result.overlay_png_base64}`;
+    anchor.download = overlayPngName(file.name);
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  }
+
+  const applied = appliedConcepts ? appliedConcepts.split(",").filter(Boolean) : [];
+  const counts = result ? regionCounts(result.boxes, applied) : [];
+
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-5 py-8 sm:px-8 sm:py-12">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-5">
         <p className="text-[11px] font-medium tracking-[0.22em] text-muted uppercase">
           Document screenshot cleaner
         </p>
-        <p className="text-xs text-muted">SAM 3.1 and Muse Spark</p>
+        <p className="text-xs text-muted">Built with SAM 3.1 and Muse</p>
       </header>
 
       <div className="mt-10 grid items-end gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
@@ -175,8 +207,8 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
             A messy page, read cleanly.
           </h1>
           <p className="max-w-md text-[15px] leading-relaxed text-muted">
-            Upload one JPEG or PNG. Choose which regions SAM 3.1 marks. Muse Spark transcribes
-            the page, proofreads the text, and the page shows what changed.
+            Upload one JPEG or PNG. Choose which regions SAM 3.1 marks. Muse transcribes the
+            page, proofreads the text, and the page shows what changed.
           </p>
         </div>
 
@@ -270,6 +302,15 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
           >
             {status === "loading" ? "Cleaning…" : "Clean screenshot"}
           </button>
+          {status === "loading" ? (
+            <button
+              type="button"
+              onClick={cancelClean}
+              className="rounded-full border border-line px-5 py-2.5 text-sm font-medium"
+            >
+              Cancel
+            </button>
+          ) : null}
         </div>
       </form>
 
@@ -303,7 +344,7 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
         <section className="mt-10 flex flex-col gap-6">
           <div className="grid items-start gap-4 md:grid-cols-2">
             <figure className="flex flex-col gap-3 rounded-3xl border border-line bg-paper p-4">
-              <figcaption className="text-[11px] font-medium tracking-[0.18em] text-muted uppercase">
+              <figcaption className="flex min-h-7 items-center text-[11px] font-medium tracking-[0.18em] text-muted uppercase">
                 Original
               </figcaption>
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -314,8 +355,17 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
               />
             </figure>
             <figure className="flex flex-col gap-3 rounded-3xl border border-line bg-paper p-4">
-              <figcaption className="text-[11px] font-medium tracking-[0.18em] text-muted uppercase">
-                SAM overlay
+              <figcaption className="flex min-h-7 items-center justify-between gap-3">
+                <span className="text-[11px] font-medium tracking-[0.18em] text-muted uppercase">
+                  SAM overlay
+                </span>
+                <button
+                  type="button"
+                  onClick={downloadOverlay}
+                  className="rounded-full border border-line px-3 py-1 text-xs"
+                >
+                  Download PNG
+                </button>
               </figcaption>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -325,28 +375,45 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
               />
             </figure>
           </div>
-          <ul className="flex flex-wrap gap-2">
-            {REGION_CONCEPTS.map((id) => (
-              <li
-                key={id}
-                className="flex items-center gap-2 rounded-full border border-line bg-paper px-3 py-1 text-sm text-muted"
-              >
-                <span
-                  className="inline-block h-2.5 w-2.5 rounded-full"
-                  style={{ backgroundColor: REGION_LABELS[id].swatch }}
-                  aria-hidden="true"
-                />
-                {REGION_LABELS[id].label}
-              </li>
-            ))}
-          </ul>
+          {counts.length > 0 ? (
+            <ul className="flex flex-wrap gap-2" aria-label="Regions found">
+              {counts.map(({ label, count, bestScore }) => {
+                const known = REGION_LABELS[label as RegionId];
+                return (
+                  <li
+                    key={label}
+                    className="flex items-center gap-2 rounded-full border border-line bg-paper px-3 py-1 text-sm text-muted"
+                  >
+                    <span
+                      className="inline-block h-2.5 w-2.5 rounded-full"
+                      style={{ backgroundColor: known.swatch }}
+                      aria-hidden="true"
+                    />
+                    <span className="text-foreground">{known.label}</span>
+                    <span>
+                      {count === 0 ? "none found" : `${count} found`}
+                      {bestScore !== null ? ` · best ${Math.round(bestScore * 100)}%` : ""}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted">No regions were requested, so the overlay has no masks.</p>
+          )}
           <Reading result={result} file={file} notice={notice} onCopy={copyText} onDownload={downloadText} />
+          {result.models ? (
+            <p className="text-xs text-muted">
+              Segmented with {result.models.segmentation}. Transcribed with{" "}
+              {result.models.transcription}. Proofread with {result.models.proofread}.
+            </p>
+          ) : null}
         </section>
       ) : null}
 
       <footer className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-line pt-16 text-xs text-muted">
         <p>JPEG or PNG, up to 10 MB, one image at a time.</p>
-        <p>SAM 3.1 marks the regions. Muse Spark reads the words.</p>
+        <p>SAM 3.1 marks the regions. Muse reads the words.</p>
       </footer>
     </main>
   );

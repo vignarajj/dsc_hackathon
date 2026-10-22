@@ -1,5 +1,9 @@
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
+// The API can spend 60 s on segmentation and transcription, then 60 s on the
+// proofread. Give it that plus some headroom before the page gives up.
+export const REQUEST_TIMEOUT_MS = 150_000;
+
 export type ProcessBox = {
   x: number;
   y: number;
@@ -9,12 +13,33 @@ export type ProcessBox = {
   score: number | null;
 };
 
+export type ProcessModels = {
+  segmentation: string;
+  transcription: string;
+  proofread: string;
+};
+
 export type ProcessResponse = {
   boxes: ProcessBox[];
   overlay_png_base64: string;
   original_text: string;
   cleaned_text: string;
+  models: ProcessModels | null;
 };
+
+export type RegionCount = {
+  label: string;
+  count: number;
+  bestScore: number | null;
+};
+
+/** Thrown when the user cancels a request, so the page can reset quietly. */
+export class CancelledError extends Error {
+  constructor() {
+    super("Cancelled");
+    this.name = "CancelledError";
+  }
+}
 
 export const REGION_CONCEPTS = ["stamp", "signature", "photograph", "rectangle"] as const;
 
@@ -23,6 +48,8 @@ const ACCEPTED_TYPES = new Set(["image/jpeg", "image/jpg", "image/png"]);
 export type ProcessRequest = {
   concepts?: readonly string[];
   fetchImpl?: typeof fetch;
+  signal?: AbortSignal;
+  timeoutMs?: number;
 };
 
 export function validateImageFile(file: { type: string; size: number }): string | null {
@@ -49,6 +76,9 @@ export function readErrorDetail(status: number, body: unknown): string {
   if (status === 413) {
     return "Image exceeds the 10 MB limit";
   }
+  if (status === 429) {
+    return "Too many requests. Wait a minute and try again.";
+  }
   if (status === 502) {
     return "The model request failed";
   }
@@ -74,7 +104,24 @@ export function parseProcessResponse(body: unknown): ProcessResponse {
     overlay_png_base64: record.overlay_png_base64,
     original_text: record.original_text,
     cleaned_text: record.cleaned_text,
+    models: parseModels(record.models),
   };
+}
+
+/** Count boxes per requested region, keeping the canonical order. */
+export function regionCounts(
+  boxes: readonly ProcessBox[],
+  concepts: readonly string[],
+): RegionCount[] {
+  return REGION_CONCEPTS.filter((concept) => concepts.includes(concept)).map((label) => {
+    const matching = boxes.filter((box) => box.label === label);
+    const scores = matching.flatMap((box) => (box.score === null ? [] : [box.score]));
+    return {
+      label,
+      count: matching.length,
+      bestScore: scores.length > 0 ? Math.max(...scores) : null,
+    };
+  });
 }
 
 export function conceptsField(concepts: readonly string[] | undefined): string {
@@ -97,12 +144,32 @@ export async function processImage(
   body.append("image", file);
   body.append("concepts", conceptsField(request.concepts));
   const endpoint = `${apiBase.replace(/\/$/, "")}/api/process`;
+  const timer = new AbortController();
+  const timeoutId = setTimeout(() => timer.abort(), request.timeoutMs ?? REQUEST_TIMEOUT_MS);
+  const timeout = timer.signal;
+  const signal = request.signal ? AbortSignal.any([request.signal, timeout]) : timeout;
 
+  try {
+    return await send(fetchImpl, endpoint, body, signal, request.signal, timeout);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function send(
+  fetchImpl: typeof fetch,
+  endpoint: string,
+  body: FormData,
+  signal: AbortSignal,
+  cancel: AbortSignal | undefined,
+  timeout: AbortSignal,
+): Promise<ProcessResponse> {
   let response: Response;
   try {
-    response = await fetchImpl(endpoint, { method: "POST", body });
+    response = await fetchImpl(endpoint, { method: "POST", body, signal });
   } catch {
-    throw new Error("Could not reach the cleaner. Start the backend and try again.");
+    throw abortError(cancel, timeout) ??
+      new Error("Could not reach the cleaner. Start the backend and try again.");
   }
 
   if (!response.ok) {
@@ -119,9 +186,39 @@ export async function processImage(
   try {
     payload = await response.json();
   } catch {
-    throw new Error("The cleaner returned an unexpected response");
+    throw abortError(cancel, timeout) ??
+      new Error("The cleaner returned an unexpected response");
   }
   return parseProcessResponse(payload);
+}
+
+function abortError(cancel: AbortSignal | undefined, timeout: AbortSignal): Error | null {
+  if (cancel?.aborted) {
+    return new CancelledError();
+  }
+  if (timeout.aborted) {
+    return new Error("The cleaner took too long to answer. Try again.");
+  }
+  return null;
+}
+
+function parseModels(value: unknown): ProcessModels | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const models = value as Record<string, unknown>;
+  if (
+    typeof models.segmentation !== "string" ||
+    typeof models.transcription !== "string" ||
+    typeof models.proofread !== "string"
+  ) {
+    return null;
+  }
+  return {
+    segmentation: models.segmentation,
+    transcription: models.transcription,
+    proofread: models.proofread,
+  };
 }
 
 function parseBox(value: unknown): ProcessBox[] {

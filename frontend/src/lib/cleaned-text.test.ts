@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { cleanedMarkdownName, markdownForCleanedText } from "./cleaned-text.ts";
+import { cleanedMarkdownName, markdownForCleanedText, overlayPngName } from "./cleaned-text.ts";
 
 describe("markdownForCleanedText", () => {
   it("keeps line breaks and ends with one newline", () => {
@@ -20,5 +20,12 @@ describe("cleanedMarkdownName", () => {
     assert.equal(cleanedMarkdownName("My Scan.JPEG"), "My-Scan.cleaned.md");
     assert.equal(cleanedMarkdownName("weird?.png"), "weird.cleaned.md");
     assert.equal(cleanedMarkdownName(""), "screenshot.cleaned.md");
+  });
+});
+
+describe("overlayPngName", () => {
+  it("uses the upload name and a png extension", () => {
+    assert.equal(overlayPngName("My Scan.JPEG"), "My-Scan.overlay.png");
+    assert.equal(overlayPngName(""), "screenshot.overlay.png");
   });
 });

@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  CancelledError,
   conceptsField,
   parseProcessResponse,
   processImage,
   readErrorDetail,
+  regionCounts,
   validateImageFile,
 } from "./process-client.ts";
 
@@ -48,6 +50,7 @@ describe("readErrorDetail", () => {
 
   it("falls back when the body has no detail", () => {
     assert.equal(readErrorDetail(502, null), "The model request failed");
+    assert.match(readErrorDetail(429, null), /Too many requests/);
     assert.equal(readErrorDetail(500, { detail: "" }), "Request failed (500)");
   });
 });
@@ -82,6 +85,7 @@ describe("processImage", () => {
     });
     assert.equal(result.cleaned_text, "Receipt");
     assert.equal(result.boxes[0]?.label, "stamp");
+    assert.equal(result.models, null);
     assert.equal(parseProcessResponse(result).overlay_png_base64, overlay);
   });
 
@@ -134,5 +138,63 @@ describe("processImage", () => {
       /Only JPEG and PNG/,
     );
     assert.equal(called, false);
+  });
+});
+
+describe("parseProcessResponse models", () => {
+  it("keeps the model names when the API sends them", () => {
+    const parsed = parseProcessResponse({
+      boxes: [],
+      overlay_png_base64: overlay,
+      original_text: "",
+      cleaned_text: "",
+      models: { segmentation: "sam-3.1", transcription: "muse-spark-1.3", proofread: "muse-wonder-1.0" },
+    });
+    assert.deepEqual(parsed.models, {
+      segmentation: "sam-3.1",
+      transcription: "muse-spark-1.3",
+      proofread: "muse-wonder-1.0",
+    });
+  });
+});
+
+describe("regionCounts", () => {
+  it("counts boxes for each requested region and keeps the best score", () => {
+    const boxes = [
+      { x: 0, y: 0, w: 1, h: 1, label: "stamp", score: 0.6 },
+      { x: 0, y: 0, w: 1, h: 1, label: "stamp", score: 0.9 },
+      { x: 0, y: 0, w: 1, h: 1, label: "signature", score: null },
+    ];
+    assert.deepEqual(regionCounts(boxes, ["signature", "stamp", "photograph"]), [
+      { label: "stamp", count: 2, bestScore: 0.9 },
+      { label: "signature", count: 1, bestScore: null },
+      { label: "photograph", count: 0, bestScore: null },
+    ]);
+    assert.deepEqual(regionCounts(boxes, []), []);
+  });
+});
+
+describe("processImage abort", () => {
+  const file = new File([new Uint8Array([1])], "note.png", { type: "image/png" });
+  const hang: typeof fetch = (_input, init) =>
+    new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+    });
+
+  it("gives up after the timeout", async () => {
+    await assert.rejects(
+      processImage(file, "http://127.0.0.1:8000", { fetchImpl: hang, timeoutMs: 10 }),
+      /took too long/,
+    );
+  });
+
+  it("reports a cancel as CancelledError", async () => {
+    const controller = new AbortController();
+    const pending = processImage(file, "http://127.0.0.1:8000", {
+      fetchImpl: hang,
+      signal: controller.signal,
+    });
+    controller.abort();
+    await assert.rejects(pending, CancelledError);
   });
 });
