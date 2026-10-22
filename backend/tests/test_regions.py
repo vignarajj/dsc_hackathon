@@ -114,3 +114,11 @@ def test_parser_stream_becomes_regions() -> None:
     assert regions[0].h == 27
     assert regions[0].score == 0.97
     assert regions[0].raster is not None
+
+
+def test_clamp_box_clips_to_the_image() -> None:
+    from dsc_backend.regions import clamp_box
+
+    assert clamp_box(-5, 2, 10, 4, 20, 20) == (0, 2, 5, 4)
+    assert clamp_box(15, 15, 10, 10, 20, 20) == (15, 15, 5, 5)
+    assert clamp_box(25, 0, 5, 5, 20, 20) is None

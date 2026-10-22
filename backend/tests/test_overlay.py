@@ -70,3 +70,37 @@ def test_box_without_mask_still_draws_an_outline() -> None:
     region = Region(x=1, y=1, w=6, h=6, label="signature", score=None)
     rendered = Image.open(io.BytesIO(render_overlay(image, [region])))
     assert rendered.getpixel((1, 1)) != (255, 255, 255, 255)
+
+
+def test_large_mask_renders_quickly_and_matches_the_raster() -> None:
+    import time
+
+    image = Image.new("RGB", (1024, 1024), (255, 255, 255))
+    raster = bytes([1, 0]) * (512 * 256)
+    region = Region(
+        x=0,
+        y=0,
+        w=1024,
+        h=1024,
+        label="stamp",
+        score=None,
+        raster=raster,
+        mask_width=512,
+        mask_height=512,
+    )
+    started = time.perf_counter()
+    rendered = Image.open(io.BytesIO(render_overlay(image, [region])))
+    assert time.perf_counter() - started < 2
+    # Even mask columns are on, odd ones off. Each mask pixel covers 2x2 image pixels.
+    assert rendered.getpixel((8, 8)) != (255, 255, 255, 255)
+    assert rendered.getpixel((10, 8)) == (255, 255, 255, 255)
+
+
+def test_outline_is_clipped_to_the_image() -> None:
+    image = Image.new("RGB", (20, 20), (255, 255, 255))
+    region = Region(x=10, y=10, w=50, h=50, label="signature", score=None)
+    rendered = Image.open(io.BytesIO(render_overlay(image, [region])))
+    assert rendered.size == (20, 20)
+    # The right and bottom edges are drawn on the image border, not off it.
+    assert rendered.getpixel((19, 15)) != (255, 255, 255, 255)
+    assert rendered.getpixel((15, 19)) != (255, 255, 255, 255)

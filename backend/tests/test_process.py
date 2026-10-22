@@ -91,6 +91,11 @@ def test_process_returns_contract_fields() -> None:
     assert overlay.startswith(b"\x89PNG")
     assert gateway.concepts == ["stamp", "signature", "photograph", "rectangle"]
     assert gateway.proofread_calls == 1
+    assert body["models"] == {
+        "segmentation": "sam-3.1",
+        "transcription": "muse-spark-1.3",
+        "proofread": "muse-spark-1.3",
+    }
 
 
 def test_jpeg_upload_is_accepted() -> None:
@@ -214,3 +219,34 @@ def test_upstream_pipeline_error_is_preserved() -> None:
         )
     assert response.status_code == 502
     assert response.json()["detail"] == "The model request failed"
+
+
+class OffImageGateway(FakeGateway):
+    async def segment(self, data_url: str, concept: str) -> list[Region]:
+        if concept != "stamp":
+            return []
+        return [
+            Region(x=6, y=6, w=10, h=10, label="stamp", score=0.8),
+            Region(x=40, y=40, w=4, h=4, label="stamp", score=0.7),
+        ]
+
+
+def test_boxes_are_clipped_and_off_image_boxes_dropped() -> None:
+    with TestClient(create_app(_settings(), OffImageGateway())) as client:
+        response = client.post(
+            "/api/process",
+            files={"image": ("note.png", _png(), "image/png")},
+        )
+    assert response.status_code == 200
+    assert response.json()["boxes"] == [
+        {"x": 6, "y": 6, "w": 2, "h": 2, "label": "stamp", "score": 0.8}
+    ]
+
+
+def test_rate_limit_returns_429() -> None:
+    with TestClient(create_app(_settings(rate_limit_per_minute=1), FakeGateway())) as client:
+        first = client.post("/api/process", files={"image": ("note.png", _png(), "image/png")})
+        second = client.post("/api/process", files={"image": ("note.png", _png(), "image/png")})
+    assert first.status_code == 200
+    assert second.status_code == 429
+    assert "Too many requests" in second.json()["detail"]

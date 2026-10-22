@@ -22,6 +22,7 @@ class Settings:
     max_upload_bytes: int = MAX_UPLOAD_BYTES
     upstream_timeout_seconds: float = 60.0
     max_image_edge: int = 2048
+    rate_limit_per_minute: int = 0
 
 
 def load_settings(env_file: Path | None = None) -> Settings:
@@ -45,6 +46,7 @@ def load_settings(env_file: Path | None = None) -> Settings:
         max_upload_bytes=MAX_UPLOAD_BYTES,
         upstream_timeout_seconds=_positive_float("UPSTREAM_TIMEOUT_SECONDS", 60.0),
         max_image_edge=2048,
+        rate_limit_per_minute=_non_negative_int("RATE_LIMIT_PER_MINUTE", 0),
     )
 
 
@@ -71,4 +73,17 @@ def _positive_float(name: str, default: float) -> float:
         raise RuntimeError(f"{name} must be a number") from exc
     if value <= 0:
         raise RuntimeError(f"{name} must be positive")
+    return value
+
+
+def _non_negative_int(name: str, default: int) -> int:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise RuntimeError(f"{name} must be a whole number") from exc
+    if value < 0:
+        raise RuntimeError(f"{name} must be zero or more")
     return value

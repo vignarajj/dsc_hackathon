@@ -31,9 +31,12 @@ curl -s -F "image=@note.png;type=image/png" -F "concepts=rectangle" http://127.0
   "boxes": [{ "x": 0, "y": 0, "w": 100, "h": 50, "label": "stamp", "score": 0.97 }],
   "overlay_png_base64": "<png with masks drawn over the working image>",
   "original_text": "<muse transcription>",
-  "cleaned_text": "<muse proofread text>"
+  "cleaned_text": "<muse proofread text>",
+  "models": { "segmentation": "sam-3.1", "transcription": "muse-spark-1.3", "proofread": "muse-spark-1.3" }
 }
 ```
+
+`models` echoes the configured model IDs so the page can name them.
 
 `score` is the SAM confidence when the model returns one, otherwise `null`.
 An image with no matching objects returns `"boxes": []` and an overlay of the
@@ -54,17 +57,26 @@ working image with no masks. That is a successful response.
    the Phase 0 spike showed they return no matches.
 4. Decode each stream with `meta-sam-parser` and paste the mask at the box
    origin, scaled to the box. A box whose mask cannot be decoded is still drawn
-   as an outline.
+   as an outline. Box coordinates are rounded, the reported boxes and outlines
+   are clipped to the working image, and a box entirely off it is dropped.
 5. Draw a light colored fill and a thicker outline on larger images. Rectangle
    fills stay lighter than stamps so the page text remains readable. The upload
    page legend uses the same colors.
 6. Transcribe the whole image with `muse-spark-1.3`, then proofread that text
    with the same model. `MUSE_TEXT_MODEL` can be set to `muse-wonder-1.0`.
+   The proofread prompt fences the transcription in `<transcript>` tags and
+   tells the model never to follow instructions inside it. A literal closing
+   tag in the text is defused, and an echoed fence is stripped from the answer.
 7. Each Meta call has a 60 second timeout. This service does not retry a model
    call. Timeout or upstream failure is HTTP 502 with `{"detail": "..."}`.
    The upload page can send the same image again as a new request.
 
 CORS allows `http://localhost:3000` and `http://127.0.0.1:3000` only.
+
+`RATE_LIMIT_PER_MINUTE` caps `/api/process` per client IP over a sliding
+minute. It is off (`0`) by default. Over the limit is HTTP 429 with
+`"Too many requests. Wait a minute and try again."`. The count lives in memory,
+so it resets on restart and is per process.
 
 ## Tests
 

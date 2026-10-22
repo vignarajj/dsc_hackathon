@@ -7,6 +7,7 @@ from dsc_backend.config import DEFAULT_CONCEPTS, Settings
 from dsc_backend.errors import PipelineError
 from dsc_backend.imaging import prepare_image, render_overlay
 from dsc_backend.meta import MetaGateway
+from dsc_backend.regions import Region, clamp_box
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ class ProcessResult:
     overlay_png_base64: str
     original_text: str
     cleaned_text: str
+    models: dict[str, str]
 
 
 def concepts_for_request(raw: str | None, default: tuple[str, ...]) -> tuple[str, ...]:
@@ -71,7 +73,18 @@ async def process_image(
     except ExceptionGroup as group:
         raise _from_group(group) from group
 
-    regions = [region for task in segment_tasks for region in task.result()]
+    width, height = prepared.image.size
+    regions: list[Region] = []
+    boxes: list[Box] = []
+    for task in segment_tasks:
+        for region in task.result():
+            # Report the part of the box on the working image; drop boxes off it.
+            clamped = clamp_box(region.x, region.y, region.w, region.h, width, height)
+            if clamped is None:
+                continue
+            x, y, w, h = clamped
+            regions.append(region)
+            boxes.append(Box(x=x, y=y, w=w, h=h, label=region.label, score=region.score))
     original_text = transcript_task.result().strip()
     cleaned_text = await _proofread(gateway, original_text)
     overlay = render_overlay(prepared.image, regions)
@@ -82,20 +95,15 @@ async def process_image(
         len(original_text),
     )
     return ProcessResult(
-        boxes=[
-            Box(
-                x=region.x,
-                y=region.y,
-                w=region.w,
-                h=region.h,
-                label=region.label,
-                score=region.score,
-            )
-            for region in regions
-        ],
+        boxes=boxes,
         overlay_png_base64=base64.b64encode(overlay).decode("ascii"),
         original_text=original_text,
         cleaned_text=cleaned_text,
+        models={
+            "segmentation": settings.sam_model,
+            "transcription": settings.muse_vision_model,
+            "proofread": settings.muse_text_model,
+        },
     )
 
 

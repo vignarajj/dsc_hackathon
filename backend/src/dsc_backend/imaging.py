@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from PIL import Image, ImageDraw, ImageOps
 
 from dsc_backend.errors import PipelineError
-from dsc_backend.regions import Region
+from dsc_backend.regions import Region, clamp_box
 
 # Fills are RGBA. Rectangle is lighter so document text stays readable.
 # The upload page legend uses these same RGB values.
@@ -88,12 +88,12 @@ def render_overlay(image: Image.Image, regions: list[Region]) -> bytes:
         stroke = 1
     draw = ImageDraw.Draw(composed)
     for region in regions:
+        clamped = clamp_box(region.x, region.y, region.w, region.h, *base.size)
+        if clamped is None:
+            continue
+        x, y, w, h = clamped
         outline = _OUTLINE.get(region.label, _DEFAULT_OUTLINE)
-        draw.rectangle(
-            (region.x, region.y, region.x + region.w - 1, region.y + region.h - 1),
-            outline=outline,
-            width=stroke,
-        )
+        draw.rectangle((x, y, x + w - 1, y + h - 1), outline=outline, width=stroke)
 
     buffer = io.BytesIO()
     composed.save(buffer, format="PNG")
@@ -129,12 +129,9 @@ def _raster_image(region: Region) -> Image.Image | None:
     expected = region.mask_width * region.mask_height
     if len(region.raster) != expected:
         return None
-    color = _FILL.get(region.label, _DEFAULT_FILL)
-    pixels = bytearray(expected * 4)
-    red, green, blue, alpha = color
-    for index, value in enumerate(region.raster):
-        if not value:
-            continue
-        offset = index * 4
-        pixels[offset : offset + 4] = bytes((red, green, blue, alpha))
-    return Image.frombytes("RGBA", (region.mask_width, region.mask_height), bytes(pixels))
+    size = (region.mask_width, region.mask_height)
+    # Any non-zero raster byte is inside the mask. Pillow does the per-pixel
+    # work in C, which keeps large masks fast.
+    alpha = Image.frombytes("L", size, region.raster).point(lambda value: 255 if value else 0)
+    fill = Image.new("RGBA", size, _FILL.get(region.label, _DEFAULT_FILL))
+    return Image.composite(fill, Image.new("RGBA", size, (0, 0, 0, 0)), alpha)

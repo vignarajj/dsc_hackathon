@@ -11,6 +11,7 @@ from dsc_backend.config import Settings, load_settings
 from dsc_backend.errors import PipelineError
 from dsc_backend.meta import MetaGateway, OpenAIGateway
 from dsc_backend.pipeline import ProcessResult, concepts_for_request, process_image
+from dsc_backend.ratelimit import RateLimiter
 
 logger = logging.getLogger("dsc")
 
@@ -29,6 +30,7 @@ class ProcessResponse(BaseModel):
     overlay_png_base64: str
     original_text: str
     cleaned_text: str
+    models: dict[str, str]
 
 
 def create_app(
@@ -51,6 +53,7 @@ def create_app(
     app = FastAPI(title="Document Screenshot Cleaner", lifespan=lifespan)
     app.state.settings = resolved
     app.state.gateway = gateway
+    app.state.limiter = RateLimiter(resolved.rate_limit_per_minute)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(resolved.cors_origins),
@@ -70,6 +73,9 @@ def create_app(
         concepts: str | None = Form(default=None),
     ) -> ProcessResult:
         settings_for_request: Settings = request.app.state.settings
+        client = request.client.host if request.client else "unknown"
+        if not request.app.state.limiter.allow(client):
+            raise PipelineError(429, "Too many requests. Wait a minute and try again.")
         content_type = image.content_type or ""
         image_bytes = await _read_upload(image, settings_for_request.max_upload_bytes)
         selected = concepts_for_request(concepts, settings_for_request.sam_concepts)

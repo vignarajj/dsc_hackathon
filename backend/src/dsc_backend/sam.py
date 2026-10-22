@@ -85,4 +85,4 @@ def _decode_mask(
 
 
 def _pixel(value: float) -> int:
-    return int(value)
+    return round(value)
