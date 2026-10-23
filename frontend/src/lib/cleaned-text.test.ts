@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { cleanedMarkdownName, markdownForCleanedText, overlayPngName } from "./cleaned-text.ts";
+import {
+  categoryLabel,
+  cleanedMarkdownName,
+  markdownForCleanedText,
+  overlayPngName,
+  safePngName,
+} from "./cleaned-text.ts";
 
 describe("markdownForCleanedText", () => {
   it("keeps line breaks and ends with one newline", () => {
@@ -27,5 +33,20 @@ describe("overlayPngName", () => {
   it("uses the upload name and a png extension", () => {
     assert.equal(overlayPngName("My Scan.JPEG"), "My-Scan.overlay.png");
     assert.equal(overlayPngName(""), "screenshot.overlay.png");
+  });
+});
+
+describe("safePngName", () => {
+  it("uses the upload name and a safe png extension", () => {
+    assert.equal(safePngName("My Scan.JPEG"), "My-Scan.safe.png");
+    assert.equal(safePngName(""), "screenshot.safe.png");
+  });
+});
+
+describe("categoryLabel", () => {
+  it("names the known categories and spells out others", () => {
+    assert.equal(categoryLabel("date_of_birth"), "Date of birth");
+    assert.equal(categoryLabel("id_number"), "ID number");
+    assert.equal(categoryLabel("tax_code"), "tax code");
   });
 });
