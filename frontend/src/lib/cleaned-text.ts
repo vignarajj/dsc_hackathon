@@ -14,6 +14,14 @@ export function overlayPngName(filename: string): string {
   return `${safeStem(filename)}.overlay.png`;
 }
 
+export function dataJsonName(filename: string): string {
+  return `${safeStem(filename)}.data.json`;
+}
+
+export function dataCsvName(filename: string): string {
+  return `${safeStem(filename)}.data.csv`;
+}
+
 export function safePngName(filename: string): string {
   return `${safeStem(filename)}.safe.png`;
 }

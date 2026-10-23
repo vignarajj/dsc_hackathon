@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 from dsc_backend.config import Settings
 from dsc_backend.errors import PipelineError
+from dsc_backend.extraction import Document, InvalidDocument, parse_document
 from dsc_backend.form import Redaction
 from dsc_backend.imaging import palette, prepare_image, region_colors, render_overlay
 from dsc_backend.meta import MetaGateway
@@ -38,6 +39,7 @@ class ProcessResult:
     sensitive: list[Span] = field(default_factory=list)
     shareable_text: str | None = None
     image_text_hidden: bool = False
+    document: Document | None = None
     warnings: list[str] = field(default_factory=list)
 
 
@@ -48,6 +50,7 @@ async def process_image(
     settings: Settings,
     concepts: tuple[str, ...] | None = None,
     redaction: Redaction | None = None,
+    extract: bool = False,
 ) -> ProcessResult:
     prepared = prepare_image(image_bytes, content_type, settings.max_image_edge)
     selected = settings.sam_concepts if concepts is None else concepts
@@ -98,14 +101,26 @@ async def process_image(
             boxes.append(Box(x=x, y=y, w=w, h=h, label=region.label, score=region.score))
     original_text = transcript_task.result().strip()
     model_task = None
+    extract_task = None
     try:
         async with asyncio.TaskGroup() as group:
             proofread_task = group.create_task(_proofread(gateway, original_text))
             if hide.text and original_text:
                 model_task = group.create_task(_optional(gateway.sensitive_spans(original_text)))
+            if extract and original_text:
+                extract_task = group.create_task(_optional(_extract(gateway, original_text)))
     except ExceptionGroup as group:
         raise _from_group(group) from group
     cleaned_text = proofread_task.result()
+
+    document: Document | None = None
+    if extract_task is not None:
+        reply = extract_task.result()
+        if reply is None:
+            warnings.append("Muse could not pull out the document's fields.")
+        else:
+            # Checked against both texts, since the proofread may fix a misread value.
+            document = parse_document(reply, original_text, cleaned_text)
     colors = region_colors(selected)
     overlay = render_overlay(prepared.image, regions, colors)
 
@@ -156,6 +171,7 @@ async def process_image(
             "transcription": settings.muse_vision_model,
             "proofread": settings.muse_text_model,
             "signatures": settings.muse_signature_model,
+            **({"extraction": settings.muse_text_model} if extract else {}),
             **({"text_boxes": settings.muse_text_box_model} if settings.redact_image_text else {}),
         },
         palette=palette(colors),
@@ -165,8 +181,24 @@ async def process_image(
         sensitive=sensitive,
         shareable_text=shareable_text,
         image_text_hidden=text_boxes is not None,
+        document=document,
         warnings=warnings,
     )
+
+
+async def _extract(gateway: MetaGateway, transcript: str) -> str:
+    """Ask for the document as data, with one repair prompt if the JSON is unusable.
+
+    The repair is a second prompt naming the problem, not a retry of a failed
+    call. Two unusable answers raise, which the caller turns into a warning.
+    """
+    reply = await gateway.extract(transcript)
+    try:
+        parse_document(reply, transcript)
+    except InvalidDocument as problem:
+        reply = await gateway.extract(transcript, str(problem))
+        parse_document(reply, transcript)
+    return reply
 
 
 def _lines(spans: list[Span]) -> list[str]:

@@ -25,6 +25,8 @@ The process refuses to start when `META_API_KEY` is missing.
 - Optional multipart field `redact_style`: `black` (default) or `blur`.
 - Optional multipart field `redact_text`: `true` to find personal details in the text and
   return a masked copy. Default `false`.
+- Optional multipart field `extract`: `true` to return the document type, a summary, and key
+  fields. Default `false`.
 
 ```bash
 curl -s -F "image=@note.png;type=image/png" http://127.0.0.1:8000/api/process
@@ -54,6 +56,12 @@ curl -s -F "image=@form.jpg;type=image/jpeg" -F "redact=signature,photograph" ht
   ],
   "shareable_text": "His name is [NAME], call [PHONE].",
   "image_text_hidden": false,
+  "document": {
+    "type": "invoice",
+    "title": "Invoice INV-2041",
+    "summary": "Invoice from Northwind Studio, $1,200.00 due.",
+    "fields": [{ "label": "Total due", "value": "$1,200.00", "found_in_text": true }]
+  },
   "warnings": ["No photograph was found, so none is hidden."]
 }
 ```
@@ -139,6 +147,25 @@ can leave shapes readable, so black is the safer choice. The copy is
 re-encoded as PNG from raw pixels, so no EXIF, GPS, or other metadata from the
 upload survives. A requested region that is not found adds a warning, and the
 copy is still returned.
+
+## Document data
+
+With `extract=true`, Muse reads the transcript while the proofread runs and
+returns the document as data, using a strict JSON schema and the same
+`<transcript>` fence. `type` is one of `invoice`, `receipt`, `form`,
+`id_document`, `letter`, `chat`, `note`, `screenshot`, or `other`. There are
+at most 20 fields; a field with an empty value, a label over 40 characters,
+or a value over 200 characters is dropped. Labels are in English and values
+are copied from the text.
+
+If the reply is not valid, Muse is asked once more with a note saying what
+was wrong. That is a second prompt, not a retry of a failed call. If the
+second reply is not valid either, or the call fails, `document` is `null` and
+a warning says so; the request still succeeds. `found_in_text` is `true` when
+the value, ignoring case, spaces, and punctuation, appears in the
+transcription or the proofread. A value that does not is still returned, so
+the page can flag it rather than hide it. `document` is `null` when
+`extract` is not `true` or no text was found.
 
 ## Sensitive text
 

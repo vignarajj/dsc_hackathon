@@ -4,6 +4,8 @@ import { describe, it } from "node:test";
 import {
   categoryLabel,
   cleanedMarkdownName,
+  dataCsvName,
+  dataJsonName,
   markdownForCleanedText,
   overlayPngName,
   safePngName,
@@ -48,5 +50,12 @@ describe("categoryLabel", () => {
     assert.equal(categoryLabel("date_of_birth"), "Date of birth");
     assert.equal(categoryLabel("id_number"), "ID number");
     assert.equal(categoryLabel("tax_code"), "tax code");
+  });
+});
+
+describe("data file names", () => {
+  it("use the upload name", () => {
+    assert.equal(dataJsonName("My Scan.JPEG"), "My-Scan.data.json");
+    assert.equal(dataCsvName("bill.png"), "bill.data.csv");
   });
 });

@@ -26,6 +26,19 @@ export type SensitiveItem = {
   source: string;
 };
 
+export type DocumentField = {
+  label: string;
+  value: string;
+  found_in_text: boolean;
+};
+
+export type DocumentData = {
+  type: string;
+  title: string;
+  summary: string;
+  fields: DocumentField[];
+};
+
 export type ProcessResponse = {
   boxes: ProcessBox[];
   overlay_png_base64: string;
@@ -37,6 +50,7 @@ export type ProcessResponse = {
   shareable_text: string | null;
   image_text_hidden: boolean;
   palette: Record<string, string>;
+  document: DocumentData | null;
   warnings: string[];
 };
 
@@ -133,6 +147,7 @@ export type ProcessRequest = {
   redact?: readonly string[];
   redactStyle?: RedactStyle;
   redactText?: boolean;
+  extract?: boolean;
   fetchImpl?: typeof fetch;
   signal?: AbortSignal;
   timeoutMs?: number;
@@ -199,6 +214,7 @@ export function parseProcessResponse(body: unknown): ProcessResponse {
     shareable_text: typeof record.shareable_text === "string" ? record.shareable_text : null,
     image_text_hidden: record.image_text_hidden === true,
     palette: parsePalette(record.palette),
+    document: parseDocument(record.document),
     warnings: Array.isArray(record.warnings)
       ? record.warnings.filter((item): item is string => typeof item === "string")
       : [],
@@ -266,6 +282,7 @@ export async function processImage(
   body.append("redact", redactField(request.redact, request.concepts, request.custom));
   body.append("redact_style", request.redactStyle ?? "black");
   body.append("redact_text", request.redactText ? "true" : "false");
+  body.append("extract", request.extract ? "true" : "false");
   const endpoint = `${apiBase.replace(/\/$/, "")}/api/process`;
   const timer = new AbortController();
   const timeoutId = setTimeout(() => timer.abort(), request.timeoutMs ?? REQUEST_TIMEOUT_MS);
@@ -388,4 +405,34 @@ function parsePalette(value: unknown): Record<string, string> {
         typeof entry[1] === "string" && /^#[0-9a-f]{6}$/i.test(entry[1]),
     ),
   );
+}
+
+function parseDocument(value: unknown): DocumentData | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const data = value as Record<string, unknown>;
+  if (
+    typeof data.type !== "string" ||
+    typeof data.title !== "string" ||
+    typeof data.summary !== "string" ||
+    !Array.isArray(data.fields)
+  ) {
+    return null;
+  }
+  return {
+    type: data.type,
+    title: data.title,
+    summary: data.summary,
+    fields: data.fields.flatMap((item: unknown): DocumentField[] => {
+      if (!item || typeof item !== "object") {
+        return [];
+      }
+      const field = item as Record<string, unknown>;
+      if (typeof field.label !== "string" || typeof field.value !== "string") {
+        return [];
+      }
+      return [{ label: field.label, value: field.value, found_in_text: field.found_in_text === true }];
+    }),
+  };
 }

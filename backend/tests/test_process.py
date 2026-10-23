@@ -517,3 +517,88 @@ def test_blocked_custom_region_is_rejected_before_any_model_call() -> None:
         "SAM marks objects, not text. Try a stamp, logo, or QR code."
     )
     assert gateway.concepts == []
+
+
+INVOICE_JSON = (
+    '{"type": "receipt", "title": "Receipt", "summary": "A receipt.",'
+    ' "fields": [{"label": "Total", "value": "Receipt total"}, {"label": "Shop", "value": "Acme"}]}'
+)
+
+
+class ExtractGateway(FakeGateway):
+    def __init__(self, replies: list[str | Exception]) -> None:
+        super().__init__()
+        self.replies = replies
+        self.extract_calls: list[str | None] = []
+
+    async def extract(self, text: str, problem: str | None = None) -> str:
+        assert text == self.transcript
+        self.extract_calls.append(problem)
+        reply = self.replies[len(self.extract_calls) - 1]
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+
+def test_document_fields_are_returned_and_grounded() -> None:
+    gateway = ExtractGateway([INVOICE_JSON])
+    with TestClient(create_app(_settings(), gateway)) as client:
+        body = _post(client, extract="true").json()
+    assert gateway.extract_calls == [None]
+    assert body["document"] == {
+        "type": "receipt",
+        "title": "Receipt",
+        "summary": "A receipt.",
+        "fields": [
+            # "Receipt total" is only in the proofread, which still counts.
+            {"label": "Total", "value": "Receipt total", "found_in_text": True},
+            {"label": "Shop", "value": "Acme", "found_in_text": False},
+        ],
+    }
+    assert body["models"]["extraction"] == "muse-spark-1.3"
+    assert body["warnings"] == []
+
+
+def test_invalid_json_gets_one_repair_prompt() -> None:
+    gateway = ExtractGateway(['{"type": "bill"}', INVOICE_JSON])
+    with TestClient(create_app(_settings(), gateway)) as client:
+        body = _post(client, extract="true").json()
+    assert len(gateway.extract_calls) == 2
+    assert gateway.extract_calls[1] is not None
+    assert "type must be one of" in gateway.extract_calls[1]
+    assert body["document"]["type"] == "receipt"
+
+
+def test_invalid_twice_or_a_failed_call_is_a_warning() -> None:
+    twice = ExtractGateway(["nope", "still nope"])
+    failed = ExtractGateway([PipelineError(502, "The model request failed")])
+    for gateway in (twice, failed):
+        with TestClient(create_app(_settings(), gateway)) as client:
+            response = _post(client, extract="true")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["document"] is None
+        assert body["warnings"] == ["Muse could not pull out the document's fields."]
+        assert body["cleaned_text"] == "Receipt total"
+    assert len(twice.extract_calls) == 2
+    assert len(failed.extract_calls) == 1
+
+
+def test_no_extraction_unless_asked_or_without_text() -> None:
+    gateway = ExtractGateway([INVOICE_JSON])
+    with TestClient(create_app(_settings(), gateway)) as client:
+        body = _post(client).json()
+        bad = _post(client, extract="perhaps")
+    assert body["document"] is None
+    assert "extraction" not in body["models"]
+    assert bad.status_code == 400
+    assert bad.json()["detail"] == "extract must be true or false."
+
+    empty = ExtractGateway([INVOICE_JSON])
+    empty.transcript = " "
+    with TestClient(create_app(_settings(), empty)) as client:
+        body = _post(client, extract="true").json()
+    assert empty.extract_calls == []
+    assert body["document"] is None
+    assert body["warnings"] == []
+    assert gateway.extract_calls == []
