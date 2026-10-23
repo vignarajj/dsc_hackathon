@@ -431,3 +431,57 @@ def test_empty_transcript_gives_empty_shareable_text() -> None:
         body = _post(client, redact_text="true").json()
     assert gateway.span_calls == 0
     assert body["shareable_text"] == ""
+
+
+class TextBoxGateway(SensitiveGateway):
+    def __init__(self, boxes: dict[str, list[tuple[int, int, int, int]]] | Exception) -> None:
+        super().__init__([Span("name", "Tom Reed", "model")])
+        self.boxes = boxes
+        self.asked: list[str] = []
+
+    async def text_boxes(
+        self, data_url: str, width: int, height: int, lines: list[str]
+    ) -> dict[str, list[tuple[int, int, int, int]]]:
+        self.asked = lines
+        if isinstance(self.boxes, Exception):
+            raise self.boxes
+        return self.boxes
+
+
+def test_image_text_is_blacked_out_only_when_the_server_allows_it() -> None:
+    gateway = TextBoxGateway({"Tom Reed": [(0, 0, 3, 3)], "07911 123456": [(5, 5, 3, 3)]})
+    with TestClient(create_app(_settings(), gateway)) as client:
+        off = _post(client, redact_text="true").json()
+    assert gateway.asked == []
+    assert off["image_text_hidden"] is False
+    assert off["redacted_png_base64"] is None
+    assert "text_boxes" not in off["models"]
+
+    with TestClient(create_app(_settings(redact_image_text=True), gateway)) as client:
+        on = _post(client, redact_text="true").json()
+    assert gateway.asked == ["Tom Reed", "07911 123456"]
+    assert on["image_text_hidden"] is True
+    assert on["models"]["text_boxes"] == "muse-wonder-1.0"
+    assert on["warnings"] == []
+    image = Image.open(io.BytesIO(base64.b64decode(on["redacted_png_base64"])))
+    assert image.getpixel((1, 1)) == (0, 0, 0)
+    assert image.getpixel((6, 6)) == (0, 0, 0)
+    assert image.getpixel((4, 1)) != (0, 0, 0)
+
+
+def test_image_text_not_found_or_failing_is_a_warning() -> None:
+    partly = TextBoxGateway({"Tom Reed": [(0, 0, 3, 3)]})
+    failing = TextBoxGateway(PipelineError(502, "The model request failed"))
+    settings = _settings(redact_image_text=True)
+    with TestClient(create_app(settings, partly)) as client:
+        some = _post(client, redact_text="true").json()
+    with TestClient(create_app(settings, failing)) as client:
+        none = _post(client, redact_text="true").json()
+    assert some["image_text_hidden"] is True
+    assert some["warnings"] == [
+        "Some sensitive text was not found in the picture, so it is not hidden there."
+    ]
+    assert none["image_text_hidden"] is False
+    assert none["redacted_png_base64"] is None
+    assert none["warnings"] == ["Text in the picture could not be located, so it is not hidden."]
+    assert none["shareable_text"] == "Mr [NAME], tel. [PHONE]"

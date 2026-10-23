@@ -18,6 +18,8 @@ class Settings:
     muse_vision_model: str = "muse-spark-1.3"
     muse_text_model: str = "muse-spark-1.3"
     muse_signature_model: str = "muse-spark-1.3"
+    muse_text_box_model: str = "muse-wonder-1.0"
+    redact_image_text: bool = False
     cors_origins: tuple[str, ...] = DEFAULT_ORIGINS
     sam_concepts: tuple[str, ...] = DEFAULT_CONCEPTS
     max_upload_bytes: int = MAX_UPLOAD_BYTES
@@ -43,6 +45,8 @@ def load_settings(env_file: Path | None = None) -> Settings:
         muse_vision_model=_text("MUSE_VISION_MODEL", "muse-spark-1.3"),
         muse_text_model=_text("MUSE_TEXT_MODEL", "muse-spark-1.3"),
         muse_signature_model=_text("MUSE_SIGNATURE_MODEL", "muse-spark-1.3"),
+        muse_text_box_model=_text("MUSE_TEXT_BOX_MODEL", "muse-wonder-1.0"),
+        redact_image_text=_flag("REDACT_IMAGE_TEXT", False),
         cors_origins=_csv("CORS_ORIGINS", DEFAULT_ORIGINS),
         sam_concepts=_csv("SAM_CONCEPTS", DEFAULT_CONCEPTS),
         max_upload_bytes=MAX_UPLOAD_BYTES,
@@ -63,6 +67,17 @@ def _csv(name: str, default: tuple[str, ...]) -> tuple[str, ...]:
         return default
     items = tuple(part.strip() for part in raw.split(",") if part.strip())
     return items or default
+
+
+def _flag(name: str, default: bool) -> bool:
+    raw = os.environ.get(name, "").strip().lower()
+    if not raw:
+        return default
+    if raw in {"true", "1", "yes", "on"}:
+        return True
+    if raw in {"false", "0", "no", "off"}:
+        return False
+    raise RuntimeError(f"{name} must be true or false")
 
 
 def _positive_float(name: str, default: float) -> float:

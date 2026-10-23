@@ -24,3 +24,14 @@ def test_env_file_supplies_the_key(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     assert settings.cors_origins == ("http://localhost:3000",)
     assert settings.sam_model == "sam-3.1"
     assert settings.upstream_timeout_seconds == 60.0
+
+
+def test_image_text_redaction_flag(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("META_API_KEY", "k")
+    monkeypatch.delenv("REDACT_IMAGE_TEXT", raising=False)
+    assert load_settings(tmp_path / "none.env").redact_image_text is False
+    monkeypatch.setenv("REDACT_IMAGE_TEXT", "true")
+    assert load_settings(tmp_path / "none.env").redact_image_text is True
+    monkeypatch.setenv("REDACT_IMAGE_TEXT", "sometimes")
+    with pytest.raises(RuntimeError):
+        load_settings(tmp_path / "none.env")

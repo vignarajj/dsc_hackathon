@@ -2,7 +2,7 @@ import pytest
 
 from dsc_backend.boxes import load_json_object, pixel_box
 from dsc_backend.errors import PipelineError
-from dsc_backend.meta import signature_regions
+from dsc_backend.meta import signature_regions, text_regions
 
 
 def test_reads_a_bare_or_fenced_json_object() -> None:
@@ -50,3 +50,21 @@ def test_empty_list_means_no_signature() -> None:
 def test_unreadable_signature_reply_is_an_upstream_error() -> None:
     with pytest.raises(PipelineError):
         signature_regions("I see a signature at the bottom.", 1000, 1000)
+
+
+def test_text_regions_keep_only_the_strings_asked_for() -> None:
+    reply = (
+        '{"boxes": ['
+        '{"text": "07911 123456", "box": [100, 100, 200, 110]},'
+        '{"text": "invented", "box": [0, 0, 10, 10]},'
+        '{"text": "Ana Silva", "box": [0, 0, 900, 900]}'
+        "]}"
+    )
+    found = text_regions(reply, 1000, 1000, ["07911 123456", "Ana Silva"])
+    # 20% of 100 wide is 20 a side; 75% of 10 high is 8 a side, rounded out.
+    assert found == {"07911 123456": [(80, 92, 140, 26)]}
+
+
+def test_unreadable_text_box_reply_is_an_upstream_error() -> None:
+    with pytest.raises(PipelineError):
+        text_regions("The phone number is at the top.", 1000, 1000, ["x"])

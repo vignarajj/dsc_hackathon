@@ -50,6 +50,7 @@ curl -s -F "image=@form.jpg;type=image/jpeg" -F "redact=signature,photograph" ht
     { "category": "name", "text": "Marco Bellini", "source": "model" }
   ],
   "shareable_text": "His name is [NAME], call [PHONE].",
+  "image_text_hidden": false,
   "warnings": ["No photograph was found, so none is hidden."]
 }
 ```
@@ -135,9 +136,21 @@ someone in full, their surname is masked wherever it also appears alone.
 `shareable_text` is the proofread text with every span replaced by
 `[CATEGORY]`, longest first. If a span cannot be found in the proofread
 because the proofread changed it, a warning says to check the text. If the
-Muse call fails, the patterns still run and a warning says so. Text inside
-the picture is not hidden by this step. `sensitive` is `[]` and
-`shareable_text` is `null` unless `redact_text` is `true`.
+Muse call fails, the patterns still run and a warning says so. `sensitive`
+is `[]` and `shareable_text` is `null` unless `redact_text` is `true`.
+
+## Text inside the picture
+
+By default the share-safe image hides regions only; text in the picture stays
+visible and `image_text_hidden` is `false`. Set `REDACT_IMAGE_TEXT=true` to
+also black out sensitive text in the image. Each line of span text is sent to
+Muse vision (`MUSE_TEXT_BOX_MODEL`, default `muse-wonder-1.0`) for its box.
+A box is kept only for a string that was asked for, is widened by 20% of its
+width and 75% of its height on each side, and is always filled black, even
+with `blur`. The F0 spike covered 24 of 24 words this way on generated
+images, which is why it stays off until it is checked on real photos. This
+call adds about 15 seconds, up to about 45. A line that is not found, or a
+failed call, is a warning.
 
 CORS allows `http://localhost:3000` and `http://127.0.0.1:3000` only.
 
