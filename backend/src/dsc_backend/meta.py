@@ -6,6 +6,7 @@ from typing import Protocol
 from meta_sam_parser import image_segmentation_format, parse_responses_stream
 from openai import APITimeoutError, AsyncOpenAI
 
+from dsc_backend.boxes import load_json_object, pixel_box
 from dsc_backend.config import Settings
 from dsc_backend.errors import PipelineError
 from dsc_backend.regions import Region
@@ -30,6 +31,24 @@ _PROOFREAD_PROMPT = (
     "Return only the cleaned text, without the tags.\n\n"
     "<transcript>\n{text}\n</transcript>"
 )
+# Region name -> SAM prompt, where they differ. In the F0 spike "photograph"
+# found nothing and "photo" found every portrait.
+SAM_PROMPTS = {"photograph": "photo"}
+
+# SAM 3.1 found no signatures in the F0 spike, so Muse vision boxes them.
+_SIGNATURE_PROMPT = (
+    "This image is {width} pixels wide and {height} pixels tall. "
+    "Find every handwritten signature in it. "
+    "A signature is a person's handwritten name or mark used to sign. "
+    "Ignore printed text, stamps, and handwritten notes that are not signatures. "
+    'Return only JSON: {{"signatures": [{{"box": [x1, y1, x2, y2]}}]}} '
+    "with pixel coordinates. Return an empty list if there is none."
+)
+# Margin as a share of the box. Muse boxes are often a little short; this
+# covered every signature in the spike.
+_SIGNATURE_PAD_X = 0.15
+_SIGNATURE_PAD_Y = 0.75
+_MAX_SIGNATURES = 10
 _OPEN_TAG = "<transcript>"
 _CLOSE_TAG = "</transcript>"
 
@@ -40,6 +59,8 @@ class MetaGateway(Protocol):
     async def transcribe(self, data_url: str) -> str: ...
 
     async def proofread(self, text: str) -> str: ...
+
+    async def signatures(self, data_url: str, width: int, height: int) -> list[Region]: ...
 
 
 class OpenAIGateway:
@@ -68,7 +89,7 @@ class OpenAIGateway:
                         "type": "message",
                         "role": "user",
                         "content": [
-                            {"type": "input_text", "text": concept},
+                            {"type": "input_text", "text": SAM_PROMPTS.get(concept, concept)},
                             {"type": "input_image", "image_url": data_url},
                         ],
                     }
@@ -120,6 +141,25 @@ class OpenAIGateway:
         )
         return strip_transcript_tags(cleaned)
 
+    async def signatures(self, data_url: str, width: int, height: int) -> list[Region]:
+        reply = await self._text_response(
+            self._settings.muse_signature_model,
+            [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": _SIGNATURE_PROMPT.format(width=width, height=height),
+                        },
+                        {"type": "input_image", "image_url": data_url},
+                    ],
+                }
+            ],
+        )
+        return signature_regions(reply, width, height)
+
     async def _text_response(self, model: str, payload: list[dict[str, object]]) -> str:
         try:
             response = await self._client.responses.create(
@@ -130,6 +170,31 @@ class OpenAIGateway:
         except Exception as exc:
             raise _upstream_error(exc) from exc
         return (getattr(response, "output_text", None) or "").strip()
+
+
+def signature_regions(reply: str, width: int, height: int) -> list[Region]:
+    """Read Muse's signature boxes. An unreadable reply is an upstream failure."""
+    data = load_json_object(reply)
+    items = data.get("signatures") if data is not None else None
+    if not isinstance(items, list):
+        raise PipelineError(502, "The model request failed")
+    regions: list[Region] = []
+    for item in items[:_MAX_SIGNATURES]:
+        box = pixel_box(
+            item.get("box") if isinstance(item, dict) else None,
+            width,
+            height,
+            _SIGNATURE_PAD_X,
+            _SIGNATURE_PAD_Y,
+        )
+        if box is None:
+            continue
+        x, y, w, h = box
+        # A box over half the page is the model naming the whole document.
+        if w * h > width * height // 2:
+            continue
+        regions.append(Region(x=x, y=y, w=w, h=h, label="signature", score=None))
+    return regions
 
 
 def proofread_prompt(text: str) -> str:

@@ -123,7 +123,8 @@ def _encode(image: Image.Image) -> tuple[bytes, str]:
     return buffer.getvalue(), "image/jpeg"
 
 
-def _raster_image(region: Region) -> Image.Image | None:
+def region_mask(region: Region) -> Image.Image | None:
+    """The region's mask as an L image at raster size: 255 inside, 0 outside."""
     if region.raster is None or region.mask_width <= 0 or region.mask_height <= 0:
         return None
     expected = region.mask_width * region.mask_height
@@ -132,6 +133,12 @@ def _raster_image(region: Region) -> Image.Image | None:
     size = (region.mask_width, region.mask_height)
     # Any non-zero raster byte is inside the mask. Pillow does the per-pixel
     # work in C, which keeps large masks fast.
-    alpha = Image.frombytes("L", size, region.raster).point(lambda value: 255 if value else 0)
-    fill = Image.new("RGBA", size, _FILL.get(region.label, _DEFAULT_FILL))
-    return Image.composite(fill, Image.new("RGBA", size, (0, 0, 0, 0)), alpha)
+    return Image.frombytes("L", size, region.raster).point(lambda value: 255 if value else 0)
+
+
+def _raster_image(region: Region) -> Image.Image | None:
+    alpha = region_mask(region)
+    if alpha is None:
+        return None
+    fill = Image.new("RGBA", alpha.size, _FILL.get(region.label, _DEFAULT_FILL))
+    return Image.composite(fill, Image.new("RGBA", alpha.size, (0, 0, 0, 0)), alpha)

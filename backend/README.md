@@ -18,10 +18,14 @@ The process refuses to start when `META_API_KEY` is missing.
 - `GET http://127.0.0.1:8000/api/health` → `{"status":"ok"}`
 - `POST http://127.0.0.1:8000/api/process` with multipart field `image`
 - Optional multipart field `concepts`, a comma-separated list. Omit it to use `SAM_CONCEPTS`.
+- Optional multipart field `redact`, a comma-separated list of marked regions to hide
+  in a share-safe copy. Omit it for no copy.
+- Optional multipart field `redact_style`: `black` (default) or `blur`.
 
 ```bash
 curl -s -F "image=@note.png;type=image/png" http://127.0.0.1:8000/api/process
 curl -s -F "image=@note.png;type=image/png" -F "concepts=rectangle" http://127.0.0.1:8000/api/process
+curl -s -F "image=@form.jpg;type=image/jpeg" -F "redact=signature,photograph" http://127.0.0.1:8000/api/process
 ```
 
 ## Response
@@ -32,11 +36,20 @@ curl -s -F "image=@note.png;type=image/png" -F "concepts=rectangle" http://127.0
   "overlay_png_base64": "<png with masks drawn over the working image>",
   "original_text": "<muse transcription>",
   "cleaned_text": "<muse proofread text>",
-  "models": { "segmentation": "sam-3.1", "transcription": "muse-spark-1.3", "proofread": "muse-spark-1.3" }
+  "models": {
+    "segmentation": "sam-3.1",
+    "transcription": "muse-spark-1.3",
+    "proofread": "muse-spark-1.3",
+    "signatures": "muse-spark-1.3"
+  },
+  "redacted_png_base64": "<png with the chosen regions hidden, or null>",
+  "warnings": ["No photograph was found, so none is hidden."]
 }
 ```
 
 `models` echoes the configured model IDs so the page can name them.
+`warnings` lists optional steps that failed or found nothing to hide. A warning
+never comes with an error status.
 
 `score` is the SAM confidence when the model returns one, otherwise `null`.
 An image with no matching objects returns `"boxes": []` and an overlay of the
@@ -54,22 +67,47 @@ working image with no masks. That is a successful response.
    ignored, and the order is always that list. An empty field skips
    segmentation. An unknown name is HTTP 400 and no model is called. When the
    field is absent, `SAM_CONCEPTS` is used. Text prompts are omitted because
-   the Phase 0 spike showed they return no matches.
-4. Decode each stream with `meta-sam-parser` and paste the mask at the box
+   the Phase 0 spike showed they return no matches. `photograph` is sent to
+   SAM as `photo`, which the F0 spike showed finds portraits that
+   `photograph` misses.
+4. When `signature` is marked, Muse vision (`MUSE_SIGNATURE_MODEL`, default
+   `muse-spark-1.3`) is also asked for signature boxes, in parallel with SAM.
+   SAM found no signatures in the F0 spike. Each Muse box is widened by 15% of
+   its width and 75% of its height on each side, because Muse boxes run a
+   little short. A box over half the image is dropped. A Muse box that repeats
+   a SAM signature (overlap of 30% or more) is dropped too, so the SAM mask
+   wins. Muse boxes have no mask and a `null` score. If this lookup fails, the
+   request still succeeds with a warning.
+5. Decode each stream with `meta-sam-parser` and paste the mask at the box
    origin, scaled to the box. A box whose mask cannot be decoded is still drawn
    as an outline. Box coordinates are rounded, the reported boxes and outlines
    are clipped to the working image, and a box entirely off it is dropped.
-5. Draw a light colored fill and a thicker outline on larger images. Rectangle
+6. Draw a light colored fill and a thicker outline on larger images. Rectangle
    fills stay lighter than stamps so the page text remains readable. The upload
    page legend uses the same colors.
-6. Transcribe the whole image with `muse-spark-1.3`, then proofread that text
+7. Transcribe the whole image with `muse-spark-1.3`, then proofread that text
    with the same model. `MUSE_TEXT_MODEL` can be set to `muse-wonder-1.0`.
    The proofread prompt fences the transcription in `<transcript>` tags and
    tells the model never to follow instructions inside it. A literal closing
    tag in the text is defused, and an echoed fence is stripped from the answer.
-7. Each Meta call has a 60 second timeout. This service does not retry a model
+8. When `redact` names regions, build the share-safe copy. It is described
+   below.
+9. Each Meta call has a 60 second timeout. This service does not retry a model
    call. Timeout or upstream failure is HTTP 502 with `{"detail": "..."}`.
    The upload page can send the same image again as a new request.
+
+## Share-safe copy
+
+`redact` must be a subset of the marked regions. Hiding a region that is not
+marked is HTTP 400, as is an unknown name or style. Each hidden region follows
+its SAM mask, pasted at the box origin like the overlay, then grown by 3
+pixels so its edge does not show. A region without a mask, such as a Muse
+signature box, is hidden as its whole box. `black` fills the area. `blur`
+applies a strong Gaussian blur sized to each box; it is weaker than black and
+can leave shapes readable, so black is the safer choice. The copy is
+re-encoded as PNG from raw pixels, so no EXIF, GPS, or other metadata from the
+upload survives. A requested region that is not found adds a warning, and the
+copy is still returned.
 
 CORS allows `http://localhost:3000` and `http://127.0.0.1:3000` only.
 

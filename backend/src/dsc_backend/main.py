@@ -10,7 +10,12 @@ from pydantic import BaseModel
 from dsc_backend.config import Settings, load_settings
 from dsc_backend.errors import PipelineError
 from dsc_backend.meta import MetaGateway, OpenAIGateway
-from dsc_backend.pipeline import ProcessResult, concepts_for_request, process_image
+from dsc_backend.pipeline import (
+    ProcessResult,
+    concepts_for_request,
+    process_image,
+    redaction_for_request,
+)
 from dsc_backend.ratelimit import RateLimiter
 
 logger = logging.getLogger("dsc")
@@ -31,6 +36,8 @@ class ProcessResponse(BaseModel):
     original_text: str
     cleaned_text: str
     models: dict[str, str]
+    redacted_png_base64: str | None
+    warnings: list[str]
 
 
 def create_app(
@@ -71,6 +78,8 @@ def create_app(
         request: Request,
         image: UploadFile = File(...),
         concepts: str | None = Form(default=None),
+        redact: str | None = Form(default=None),
+        redact_style: str | None = Form(default=None),
     ) -> ProcessResult:
         settings_for_request: Settings = request.app.state.settings
         client = request.client.host if request.client else "unknown"
@@ -79,12 +88,14 @@ def create_app(
         content_type = image.content_type or ""
         image_bytes = await _read_upload(image, settings_for_request.max_upload_bytes)
         selected = concepts_for_request(concepts, settings_for_request.sam_concepts)
+        redaction = redaction_for_request(redact, redact_style, selected)
         return await process_image(
             image_bytes,
             content_type,
             request.app.state.gateway,
             settings_for_request,
             selected,
+            redaction,
         )
 
     return app

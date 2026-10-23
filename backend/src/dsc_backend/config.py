@@ -17,6 +17,7 @@ class Settings:
     sam_model: str = "sam-3.1"
     muse_vision_model: str = "muse-spark-1.3"
     muse_text_model: str = "muse-spark-1.3"
+    muse_signature_model: str = "muse-spark-1.3"
     cors_origins: tuple[str, ...] = DEFAULT_ORIGINS
     sam_concepts: tuple[str, ...] = DEFAULT_CONCEPTS
     max_upload_bytes: int = MAX_UPLOAD_BYTES
@@ -41,6 +42,7 @@ def load_settings(env_file: Path | None = None) -> Settings:
         sam_model=_text("SAM_MODEL", "sam-3.1"),
         muse_vision_model=_text("MUSE_VISION_MODEL", "muse-spark-1.3"),
         muse_text_model=_text("MUSE_TEXT_MODEL", "muse-spark-1.3"),
+        muse_signature_model=_text("MUSE_SIGNATURE_MODEL", "muse-spark-1.3"),
         cors_origins=_csv("CORS_ORIGINS", DEFAULT_ORIGINS),
         sam_concepts=_csv("SAM_CONCEPTS", DEFAULT_CONCEPTS),
         max_upload_bytes=MAX_UPLOAD_BYTES,

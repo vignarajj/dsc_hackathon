@@ -13,11 +13,16 @@ from dsc_backend.regions import Region
 
 class FakeGateway:
     def __init__(
-        self, fail_with: Exception | None = None, transcript: str = "Reciept total"
+        self,
+        fail_with: Exception | None = None,
+        transcript: str = "Reciept total",
+        signatures: list[Region] | Exception | None = None,
     ) -> None:
         self.fail_with = fail_with
         self.transcript = transcript
+        self.signature_result = [] if signatures is None else signatures
         self.concepts: list[str] = []
+        self.signature_calls: list[tuple[int, int]] = []
         self.proofread_calls = 0
 
     async def segment(self, data_url: str, concept: str) -> list[Region]:
@@ -49,6 +54,13 @@ class FakeGateway:
         self.proofread_calls += 1
         assert text == self.transcript
         return "Receipt total"
+
+    async def signatures(self, data_url: str, width: int, height: int) -> list[Region]:
+        assert data_url.startswith("data:image/")
+        self.signature_calls.append((width, height))
+        if isinstance(self.signature_result, Exception):
+            raise self.signature_result
+        return self.signature_result
 
 
 def _settings(**overrides: object) -> Settings:
@@ -95,7 +107,11 @@ def test_process_returns_contract_fields() -> None:
         "segmentation": "sam-3.1",
         "transcription": "muse-spark-1.3",
         "proofread": "muse-spark-1.3",
+        "signatures": "muse-spark-1.3",
     }
+    assert gateway.signature_calls == [(8, 8)]
+    assert body["redacted_png_base64"] is None
+    assert body["warnings"] == []
 
 
 def test_jpeg_upload_is_accepted() -> None:
@@ -250,3 +266,88 @@ def test_rate_limit_returns_429() -> None:
     assert first.status_code == 200
     assert second.status_code == 429
     assert "Too many requests" in second.json()["detail"]
+
+
+def _signature_at(x: int, y: int, w: int, h: int) -> Region:
+    return Region(x=x, y=y, w=w, h=h, label="signature", score=None)
+
+
+def _post(client: TestClient, **data: str):
+    return client.post(
+        "/api/process", data=data, files={"image": ("note.png", _png(), "image/png")}
+    )
+
+
+def test_redacted_copy_hides_the_chosen_regions() -> None:
+    gateway = FakeGateway(signatures=[_signature_at(4, 4, 4, 4)])
+    with TestClient(create_app(_settings(), gateway)) as client:
+        response = _post(client, redact="stamp,signature", redact_style="black")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["warnings"] == []
+    redacted = Image.open(io.BytesIO(base64.b64decode(body["redacted_png_base64"])))
+    assert redacted.format == "PNG"
+    assert redacted.getpixel((1, 1)) == (0, 0, 0)
+    assert redacted.getpixel((6, 6)) == (0, 0, 0)
+    assert body["boxes"][-1] == {
+        "x": 4,
+        "y": 4,
+        "w": 4,
+        "h": 4,
+        "label": "signature",
+        "score": None,
+    }
+
+
+def test_muse_signature_that_repeats_a_sam_one_is_dropped() -> None:
+    class SamSignature(FakeGateway):
+        async def segment(self, data_url: str, concept: str) -> list[Region]:
+            if concept == "signature":
+                return [_signature_at(0, 0, 6, 6)]
+            return []
+
+    gateway = SamSignature(signatures=[_signature_at(1, 1, 6, 6), _signature_at(6, 6, 2, 2)])
+    with TestClient(create_app(_settings(), gateway)) as client:
+        response = _post(client)
+    signature_boxes = [box for box in response.json()["boxes"] if box["label"] == "signature"]
+    assert [(box["x"], box["y"]) for box in signature_boxes] == [(0, 0), (6, 6)]
+
+
+def test_signature_lookup_failure_is_a_warning_not_an_error() -> None:
+    gateway = FakeGateway(signatures=PipelineError(502, "The model request failed"))
+    with TestClient(create_app(_settings(), gateway)) as client:
+        response = _post(client, redact="signature")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["warnings"] == ["Signatures could not be located, so none are marked or hidden."]
+    assert body["redacted_png_base64"]
+    assert body["cleaned_text"] == "Receipt total"
+
+
+def test_hiding_a_region_that_is_not_found_says_so() -> None:
+    with TestClient(create_app(_settings(), FakeGateway())) as client:
+        response = _post(client, redact="photograph")
+    assert response.status_code == 200
+    assert response.json()["warnings"] == ["No photograph was found, so none is hidden."]
+    assert response.json()["redacted_png_base64"]
+
+
+def test_signatures_are_not_looked_up_unless_marked() -> None:
+    gateway = FakeGateway()
+    with TestClient(create_app(_settings(), gateway)) as client:
+        _post(client, concepts="stamp")
+    assert gateway.signature_calls == []
+
+
+def test_hidden_regions_must_be_marked_and_the_style_known() -> None:
+    gateway = FakeGateway()
+    with TestClient(create_app(_settings(), gateway)) as client:
+        unmarked = _post(client, concepts="stamp", redact="signature")
+        unknown = _post(client, redact="face")
+        style = _post(client, redact="stamp", redact_style="pixelate")
+    assert unmarked.status_code == 400
+    assert "Mark signature" in unmarked.json()["detail"]
+    assert unknown.status_code == 400
+    assert style.status_code == 400
+    assert style.json()["detail"] == "Hidden regions can be black or blur."
+    assert gateway.concepts == []
