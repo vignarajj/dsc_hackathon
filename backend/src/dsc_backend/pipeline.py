@@ -1,12 +1,14 @@
 import asyncio
 import base64
 import logging
-from dataclasses import dataclass
+from collections.abc import Awaitable
+from dataclasses import dataclass, field
 
 from dsc_backend.config import DEFAULT_CONCEPTS, Settings
 from dsc_backend.errors import PipelineError
 from dsc_backend.imaging import prepare_image, render_overlay
 from dsc_backend.meta import MetaGateway
+from dsc_backend.redaction import REDACT_STYLES, render_redacted
 from dsc_backend.regions import Region, clamp_box
 
 logger = logging.getLogger(__name__)
@@ -29,6 +31,14 @@ class ProcessResult:
     original_text: str
     cleaned_text: str
     models: dict[str, str]
+    redacted_png_base64: str | None = None
+    warnings: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class Redaction:
+    labels: tuple[str, ...] = ()
+    style: str = "black"
 
 
 def concepts_for_request(raw: str | None, default: tuple[str, ...]) -> tuple[str, ...]:
@@ -54,15 +64,43 @@ def concepts_for_request(raw: str | None, default: tuple[str, ...]) -> tuple[str
     return tuple(concept for concept in DEFAULT_CONCEPTS if concept in chosen)
 
 
+def redaction_for_request(
+    raw_labels: str | None,
+    raw_style: str | None,
+    concepts: tuple[str, ...],
+) -> Redaction:
+    """Read which marked regions to hide, and how.
+
+    Only regions that are also marked can be hidden, so the page never offers
+    a share-safe copy built from regions nobody looked for.
+    """
+    labels = concepts_for_request(raw_labels or "", DEFAULT_CONCEPTS)
+    missing = [label for label in labels if label not in concepts]
+    if missing:
+        raise PipelineError(
+            400,
+            f"Only marked regions can be hidden. Mark {missing[0]} as well, or stop hiding it.",
+        )
+    style = (raw_style or "black").strip().lower()
+    if style not in REDACT_STYLES:
+        raise PipelineError(400, "Hidden regions can be black or blur.")
+    return Redaction(labels=labels, style=style)
+
+
 async def process_image(
     image_bytes: bytes,
     content_type: str,
     gateway: MetaGateway,
     settings: Settings,
     concepts: tuple[str, ...] | None = None,
+    redaction: Redaction | None = None,
 ) -> ProcessResult:
     prepared = prepare_image(image_bytes, content_type, settings.max_image_edge)
     selected = settings.sam_concepts if concepts is None else concepts
+    hide = redaction or Redaction()
+    width, height = prepared.image.size
+    warnings: list[str] = []
+    signature_task = None
     try:
         async with asyncio.TaskGroup() as group:
             segment_tasks = [
@@ -70,14 +108,33 @@ async def process_image(
                 for concept in selected
             ]
             transcript_task = group.create_task(gateway.transcribe(prepared.data_url))
+            if "signature" in selected:
+                signature_task = group.create_task(
+                    _optional(gateway.signatures(prepared.data_url, width, height))
+                )
     except ExceptionGroup as group:
         raise _from_group(group) from group
 
-    width, height = prepared.image.size
+    muse_signatures: list[Region] = []
+    signatures_failed = False
+    if signature_task is not None:
+        found = signature_task.result()
+        if found is None:
+            signatures_failed = True
+            warnings.append(
+                "Signatures could not be located, so none are "
+                + ("marked or hidden." if "signature" in hide.labels else "marked.")
+            )
+        else:
+            muse_signatures = found
+
     regions: list[Region] = []
     boxes: list[Box] = []
-    for task in segment_tasks:
-        for region in task.result():
+    for concept, task in zip(selected, segment_tasks, strict=True):
+        found_regions = task.result()
+        if concept == "signature":
+            found_regions = found_regions + _new_regions(muse_signatures, found_regions)
+        for region in found_regions:
             # Report the part of the box on the working image; drop boxes off it.
             clamped = clamp_box(region.x, region.y, region.w, region.h, width, height)
             if clamped is None:
@@ -88,10 +145,22 @@ async def process_image(
     original_text = transcript_task.result().strip()
     cleaned_text = await _proofread(gateway, original_text)
     overlay = render_overlay(prepared.image, regions)
+
+    redacted: bytes | None = None
+    if hide.labels:
+        redacted, hidden = render_redacted(prepared.image, regions, hide.labels, hide.style)
+        for label in hide.labels:
+            if label == "signature" and signatures_failed:
+                continue
+            if not any(region.label == label for region in regions):
+                warnings.append(f"No {label} was found, so none is hidden.")
+    else:
+        hidden = 0
     logger.info(
-        "processed concepts=%s boxes=%s text_chars=%s",
+        "processed concepts=%s boxes=%s hidden=%s text_chars=%s",
         ",".join(selected) or "-",
         len(regions),
+        hidden,
         len(original_text),
     )
     return ProcessResult(
@@ -103,8 +172,41 @@ async def process_image(
             "segmentation": settings.sam_model,
             "transcription": settings.muse_vision_model,
             "proofread": settings.muse_text_model,
+            "signatures": settings.muse_signature_model,
         },
+        redacted_png_base64=(
+            base64.b64encode(redacted).decode("ascii") if redacted is not None else None
+        ),
+        warnings=warnings,
     )
+
+
+async def _optional[T](call: Awaitable[T]) -> T | None:
+    """Run a step whose failure should not fail the request."""
+    try:
+        return await call
+    except Exception as exc:
+        logger.warning("optional step failed: %s", type(exc).__name__)
+        return None
+
+
+def _new_regions(candidates: list[Region], existing: list[Region]) -> list[Region]:
+    """Keep the candidates that do not repeat a region already found."""
+    return [
+        region
+        for region in candidates
+        if not any(_overlap(region, other) >= 0.3 for other in existing)
+    ]
+
+
+def _overlap(a: Region, b: Region) -> float:
+    """Intersection over union of two boxes."""
+    width = min(a.x + a.w, b.x + b.w) - max(a.x, b.x)
+    height = min(a.y + a.h, b.y + b.h) - max(a.y, b.y)
+    if width <= 0 or height <= 0:
+        return 0.0
+    inter = width * height
+    return inter / (a.w * a.h + b.w * b.h - inter)
 
 
 async def _proofread(gateway: MetaGateway, original_text: str) -> str:

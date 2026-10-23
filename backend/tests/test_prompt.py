@@ -1,4 +1,10 @@
-from dsc_backend.meta import proofread_prompt, strip_transcript_tags
+import asyncio
+
+import pytest
+
+from dsc_backend.config import Settings
+from dsc_backend.errors import PipelineError
+from dsc_backend.meta import OpenAIGateway, proofread_prompt, strip_transcript_tags
 
 
 def test_transcript_is_fenced_and_cannot_close_the_fence() -> None:
@@ -12,3 +18,25 @@ def test_transcript_is_fenced_and_cannot_close_the_fence() -> None:
 def test_echoed_fence_is_removed() -> None:
     assert strip_transcript_tags("<transcript>\nTotal 12\n</transcript>") == "Total 12"
     assert strip_transcript_tags("Total 12") == "Total 12"
+
+
+def test_photograph_is_sent_to_sam_as_photo() -> None:
+    sent: list[str] = []
+
+    async def capture(**kwargs: object) -> None:
+        message = kwargs["input"][0]  # type: ignore[index]
+        sent.append(message["content"][0]["text"])
+        raise RuntimeError("stop before the network")
+
+    async def run(concept: str) -> None:
+        gateway = OpenAIGateway(Settings(meta_api_key="test-key"))
+        gateway._client.responses.create = capture  # type: ignore[method-assign]
+        try:
+            with pytest.raises(PipelineError):
+                await gateway.segment("data:image/png;base64,AA==", concept)
+        finally:
+            await gateway.aclose()
+
+    asyncio.run(run("photograph"))
+    asyncio.run(run("stamp"))
+    assert sent == ["photo", "stamp"]
