@@ -27,7 +27,7 @@ export default defineConfig({
       cwd: "../backend",
       url: "http://127.0.0.1:8100/api/health",
       reuseExistingServer: false,
-      env: { CORS_ORIGINS: "http://127.0.0.1:3100" },
+      env: { CORS_ORIGINS: "http://127.0.0.1:3100", FAKE_DELAY_SECONDS: "1" },
     },
     {
       // The API address is baked in at build time, so build against the fake one.

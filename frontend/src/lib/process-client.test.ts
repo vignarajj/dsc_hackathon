@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   CancelledError,
+  applyStageEvent,
   conceptsField,
   customChoice,
   parseProcessResponse,
@@ -10,6 +11,8 @@ import {
   readErrorDetail,
   redactField,
   regionCounts,
+  splitLines,
+  type StageState,
   validateImageFile,
 } from "./process-client.ts";
 
@@ -363,5 +366,129 @@ describe("custom regions in the request", () => {
       palette: { logo: "#7c3aed", stamp: "red", "qr code": 3 },
     });
     assert.deepEqual(parsed.palette, { logo: "#7c3aed" });
+  });
+});
+
+function ndjson(chunks: string[]): Response {
+  const encoder = new TextEncoder();
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) {
+        controller.enqueue(encoder.encode(chunk));
+      }
+      controller.close();
+    },
+  });
+  return new Response(body, { status: 200, headers: { "content-type": "application/x-ndjson" } });
+}
+
+const resultLine = JSON.stringify({
+  event: "result",
+  data: { boxes: [], overlay_png_base64: overlay, original_text: "a", cleaned_text: "a" },
+});
+
+describe("splitLines", () => {
+  it("keeps a partial last line for the next chunk", () => {
+    assert.deepEqual(splitLines('{"a":1}\n{"b"'), { lines: ['{"a":1}'], rest: '{"b"' });
+    assert.deepEqual(splitLines('{"a":1}\n\n'), { lines: ['{"a":1}'], rest: "" });
+    assert.deepEqual(splitLines(""), { lines: [], rest: "" });
+  });
+});
+
+describe("applyStageEvent", () => {
+  it("plans the stages, then tracks each one", () => {
+    let stages: StageState[] = [];
+    stages = applyStageEvent(stages, '{"event":"stages","stages":["prepare","segment"]}');
+    assert.deepEqual(stages.map((item) => item.status), ["waiting", "waiting"]);
+    stages = applyStageEvent(
+      stages,
+      '{"event":"stage","stage":"segment","status":"done","detail":"stamp: 1"}',
+    );
+    assert.deepEqual(stages[1], { stage: "segment", status: "done", detail: "stamp: 1" });
+    assert.equal(applyStageEvent(stages, "not json"), stages);
+    assert.equal(applyStageEvent(stages, '{"event":"stage","stage":"x","status":"odd"}'), stages);
+  });
+});
+
+describe("processImage streaming", () => {
+  const file = new File([new Uint8Array([1])], "note.png", { type: "image/png" });
+
+  it("asks for a stream, reports each stage, and returns the result", async () => {
+    const seen: string[] = [];
+    let accept: string | null = null;
+    const stages = '{"event":"stages","stages":["prepare","transcribe"]}\n';
+    const prepare = '{"event":"stage","stage":"prepare","status":"done","detail":"8x8"}\n';
+    const transcribe = '{"event":"stage","stage":"transcribe","status":"running","detail":null}\n';
+    const lines = stages + prepare + transcribe + resultLine + "\n";
+    // Split the body at awkward places, including inside a line and a multi-byte char.
+    const chunks = [lines.slice(0, 7), lines.slice(7, 60), lines.slice(60, 200), lines.slice(200)];
+    const result = await processImage(file, "http://127.0.0.1:8000", {
+      onProgress: (state) =>
+        seen.push(state.map((item) => `${item.stage}:${item.status}`).join(",")),
+      fetchImpl: async (_input, init) => {
+        accept = new Headers(init?.headers).get("accept");
+        return ndjson(chunks);
+      },
+    });
+    assert.equal(accept, "application/x-ndjson");
+    assert.equal(result.cleaned_text, "a");
+    assert.deepEqual(seen, [
+      "prepare:waiting,transcribe:waiting",
+      "prepare:done,transcribe:waiting",
+      "prepare:done,transcribe:running",
+    ]);
+  });
+
+  it("reads a final line with no newline", async () => {
+    const result = await processImage(file, "http://127.0.0.1:8000", {
+      onProgress: () => {},
+      fetchImpl: async () => ndjson([resultLine]),
+    });
+    assert.equal(result.original_text, "a");
+  });
+
+  it("turns an error event into its message", async () => {
+    await assert.rejects(
+      processImage(file, "http://127.0.0.1:8000", {
+        onProgress: () => {},
+        fetchImpl: async () =>
+          ndjson(['{"event":"error","status":502,"detail":"The model request timed out"}\n']),
+      }),
+      /The model request timed out/,
+    );
+  });
+
+  it("says so when the stream stops before a result", async () => {
+    await assert.rejects(
+      processImage(file, "http://127.0.0.1:8000", {
+        onProgress: () => {},
+        fetchImpl: async () => ndjson(['{"event":"stages","stages":["prepare"]}\n']),
+      }),
+      /stopped before it finished/,
+    );
+  });
+
+  it("falls back to plain JSON from a server that does not stream", async () => {
+    let calls = 0;
+    const result = await processImage(file, "http://127.0.0.1:8000", {
+      onProgress: () => {
+        calls += 1;
+      },
+      fetchImpl: async () =>
+        jsonResponse(200, { boxes: [], overlay_png_base64: overlay, original_text: "b", cleaned_text: "b" }),
+    });
+    assert.equal(result.cleaned_text, "b");
+    assert.equal(calls, 0);
+  });
+
+  it("does not ask for a stream without a progress callback", async () => {
+    let accept: string | null = "unset";
+    await processImage(file, "http://127.0.0.1:8000", {
+      fetchImpl: async (_input, init) => {
+        accept = new Headers(init?.headers).get("accept");
+        return jsonResponse(200, { boxes: [], overlay_png_base64: overlay, original_text: "", cleaned_text: "" });
+      },
+    });
+    assert.equal(accept, null);
   });
 });

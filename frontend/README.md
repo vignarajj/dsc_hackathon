@@ -42,6 +42,10 @@ If the read fails and the file is still selected, Try again sends that file once
 
 A 67 second recording of the polished page is at `../demo/final-demo.webm`. The earlier happy path is at `../demo/happy-path.webm`. Both were recorded before the region checkboxes, the proofread comparison, Try again, Cancel, region counts, overlay download, and everything in the feature expansion plan.
 
+## Progress
+
+The page asks the API to stream its progress. While a request runs, a list under the progress bar shows each step the API planned (preparing the image, finding regions with SAM, reading the text with Muse, proofreading, and, when chosen, pulling out fields and finding personal details, then building the overlay and share-safe copy). Each step is marked waiting, in progress, or done, with a short detail such as how many of each region were found. Cancel closes the stream, and the API then stops the request instead of finishing it. An API that does not stream still works: the page reads its plain JSON answer and shows no step list.
+
 ## Layout
 
 No file to hand? Four sample pages sit under the drop zone: an invoice with a PAID stamp, a signed form with a photo, a handwritten note, and a chat screenshot. They live in `public/samples/` and were made for this app; the names are invented and the phone numbers are from reserved drama ranges. Clicking one loads it as a file, so it goes through the same checks and request as an upload.
@@ -59,4 +63,4 @@ pnpm typecheck   # generates Next route types, then runs tsc
 pnpm test:e2e     # browser tests, see below
 ```
 
-`pnpm test:e2e` builds the page into `.next-e2e` against a fake API and runs Playwright on desktop and on a 375 px dark-mode phone. The fake API is `backend/tests/fake_server.py`: the real FastAPI app with a fixed model gateway, so the tests never call Meta and need no key. It starts its own servers on ports 8100 and 3100 and never reuses one that is already running. The tests walk a sample through every tab, check that each download produces a file, and cover the tab keys, the region highlight, empty tabs, Cancel, and a blocked custom region. Install a browser once with `pnpm exec playwright install chromium`, or set `CHROMIUM_PATH` to one already installed. CI runs the same tests.
+`pnpm test:e2e` builds the page into `.next-e2e` against a fake API and runs Playwright on desktop and on a 375 px dark-mode phone. The fake API is `backend/tests/fake_server.py`: the real FastAPI app with a fixed model gateway, so the tests never call Meta and need no key. It starts its own servers on ports 8100 and 3100 and never reuses one that is already running. The fake API pauses one second in the proofread so the tests can see a step in progress. The tests walk a sample through every tab, check that each download produces a file, check the step list and cancelling a streamed run, and cover the tab keys, the region highlight, empty tabs, Cancel, and a blocked custom region. Install a browser once with `pnpm exec playwright install chromium`, or set `CHROMIUM_PATH` to one already installed. CI runs the same tests.

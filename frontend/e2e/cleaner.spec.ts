@@ -70,6 +70,42 @@ test("a sample goes through every tab, and each download produces a file", async
   expect(overflow).toBe(false);
 });
 
+test("each stage is listed as it finishes", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: /Signed form with a photo/ }).click();
+  await page.getByRole("button", { name: "Clean screenshot" }).click();
+  const progress = page.getByRole("list", { name: "Progress" });
+  // The fake API pauses in the proofread, so the steps before it are done by then.
+  await expect(progress.getByRole("listitem").filter({ hasText: "Reading the text" })).toContainText(
+    "Done",
+  );
+  await expect(progress.getByRole("listitem").filter({ hasText: "Finding regions" })).toContainText(
+    "stamp: 1",
+  );
+  await expect(progress.getByRole("listitem").filter({ hasText: "Proofreading" })).toContainText(
+    "In progress",
+  );
+  await expect(progress.getByRole("listitem").filter({ hasText: "Building the overlay" })).toContainText(
+    "Waiting",
+  );
+  await expect(page.getByRole("tablist", { name: "Result" })).toBeVisible();
+  await expect(progress).toHaveCount(0);
+});
+
+test("cancelling a streamed run returns the page to idle", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: /Invoice with a PAID stamp/ }).click();
+  await page.getByRole("button", { name: "Clean screenshot" }).click();
+  await expect(
+    page.getByRole("list", { name: "Progress" }).getByRole("listitem").filter({ hasText: "Proofreading" }),
+  ).toContainText("In progress");
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByRole("button", { name: "Clean screenshot" })).toBeEnabled();
+  await expect(page.getByRole("list", { name: "Progress" })).toHaveCount(0);
+  // The page shows errors in a p[role=alert]; Next adds its own empty announcer.
+  await expect(page.locator("p[role=alert]")).toHaveCount(0);
+});
+
 test("tabs follow the arrow, Home, and End keys", async ({ page }) => {
   await cleanSample(page);
   const overview = page.getByRole("tab", { name: "Overview" });

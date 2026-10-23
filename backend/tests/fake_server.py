@@ -3,6 +3,7 @@
 uv run python tests/fake_server.py [port]
 """
 
+import asyncio
 import base64
 import io
 import json
@@ -71,6 +72,8 @@ class FakeGateway:
         return TRANSCRIPT
 
     async def proofread(self, text: str) -> str:
+        # A pause, so the browser tests can see a stage in progress.
+        await asyncio.sleep(float(os.environ.get("FAKE_DELAY_SECONDS", "0")))
         return text.replace("Signture", "Signature")
 
     async def signatures(self, data_url: str, width: int, height: int) -> list[Region]:
