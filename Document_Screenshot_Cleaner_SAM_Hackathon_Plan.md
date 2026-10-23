@@ -218,6 +218,101 @@ text extraction comes from **Muse vision full-image transcription** (verified:
 perfect receipt transcription), SAM covers non-text regions (stamps, signatures,
 graphics, noise). The `§3.1` contract is unchanged — boxes + overlay PNG.
 
+### 5.1 F0 spike results (Feature Expansion Plan, 23 Oct 2026)
+
+**Set:** 8 generated documents, made for this run with known ground truth:
+invoice, receipt, signed form, ID card on a desk, handwritten note, chat
+screenshot, letter, bank slip. Seven are shot as photos (tilt, background,
+uneven light, noise, 2200–2400 px); the chat is a flat 1170×2532 screenshot.
+Everything goes through `prepare_image` (2048 px cap), as in production.
+Signatures are drawn strokes, faces are drawn portraits, and handwriting is an
+italic font with jitter. **No real photos were used.** Wikimedia is blocked
+from the dev container, so every result below needs a recheck on real
+photos. That recheck matters most for S1 and S4. About 250 live calls in
+total. The scripts and images stay in the scratchpad and are not committed.
+
+**S1 — SAM prompts** (13 prompts × 8 images, plus a follow-up on 5 images)
+
+| Prompt | Targets found | Extra regions | Notes |
+|---|---|---|---|
+| `stamp` | 4/4 | 0 | round and rectangular |
+| `seal` | 3/4 | 0 | missed the rectangular bank stamp |
+| `logo` | 3/3 | 3 | finds the logo mark, not the wordmark beside it. The 3 extra regions are round stamps |
+| `qr code` | 1/1 | 0 | |
+| `barcode` | 2/2 | 0 | |
+| `face` | 3/3 portraits | 0 | |
+| `checkbox` | 5/5 | 0 | ticked and empty |
+| `table` | 2/3 | 0 | missed the small two-row table |
+| `id card` | 1/1 | 2 | the extras are whole invoice and receipt pages |
+| `photograph` | 0/3 | 0 | `photo`, `person` and `headshot` found the portrait on both images tried |
+| `signature` | 0/4 | 0 | also 0 for `handwritten signature`, `autograph`, `scribble`, on tight crops, on a cursive-name signature, and on a plain black stroke |
+| `handwriting` | 0/5 | 0 | also 0 for `handwritten text` |
+| `rectangle` | — | 14 | not scored: chat bubbles, the card, table blocks |
+
+The `logo` note in the Phase 0 block above is out of date: `logo` now hits.
+
+**S2 — JSON from Muse** (`muse-spark-1.3`, 10 runs per mode)
+
+| Mode | Strict parse | Matches the F3 schema | Field values found in the transcript |
+|---|---|---|---|
+| Responses `text.format` JSON schema (`strict: true`) | 10/10 | 10/10 | 148/148 |
+| Prompt "return only JSON" | 10/10 | 10/10 | 138/138 |
+
+Document type was right on 9/10. The bank slip came back as `receipt`.
+
+**S3 — sensitive text spans** (`text.format` schema, categories as an enum)
+- 42 items returned, all verbatim substrings of the transcript.
+- Precision is 39/42 = **93%**. The 3 misses are business addresses (shop and
+  firm letterheads). Names outside the ground truth (a cashier, a checker,
+  "Sam", "Ana", the letter's signer) and a sort code count as correct.
+- Recall is 33/34 ground-truth items. The miss is the receipt's
+  already-masked card number `**** 4242`.
+
+**S4 — word boxes from Muse vision** (3 strings per image, 24 total; pixel coordinates)
+
+| Model | IoU ≥ 0.5 | Box fully covers the word: as returned / +0.5 h / +0.75 h | Median / max time |
+|---|---|---|---|
+| `muse-spark-1.3` | 13/24 | 4 / 17 / 21 | 4.6 s / 6.0 s |
+| `muse-wonder-1.0` | 21/24 | 7 / 22 / **24** | 15.3 s / 46.3 s |
+
+Boxes are in pixels. Neither 0–1000 nor 0–1 scaling matched anything. Spark
+put two receipt boxes on the wrong line. Wonder's boxes sit a few pixels off
+the word, so they need a margin before they can hide it.
+
+**S5 — region descriptions** (11 SAM crops, `muse-spark-1.3`)
+- 11/11 are accurate and quote the text inside, for example *Circular red
+  stamp: "PAID" "NORTHWIND STUDIO LEEDS"*.
+- No guesses about identity.
+- Two crops carried a wrong SAM label: a stamp tagged `logo` and a page tagged
+  `id card`. The description named what was really there both times.
+
+**S6 — latency and size** (4 calls in flight)
+
+| Call | Median | p90 | Max |
+|---|---|---|---|
+| SAM (178 calls) | 1.4 s | 3.9 s | 11.3 s |
+| Transcribe | 4.7 s | 6.4 s | 7.9 s |
+| Proofread | 2.9 s | 3.7 s | 4.8 s |
+| Extract (schema) | 5.6 s | 6.1 s | 6.3 s |
+| Sensitive spans | 7.8 s | 12.2 s | 16.5 s |
+| Describe region | 3.8 s | 6.0 s | 6.7 s |
+| Word boxes (wonder) | 15.3 s | 36.9 s | 46.3 s |
+
+The overlay PNG at 2048 px is 0.39–2.30 MB (median about 1.6 MB). As JPEG q85
+the same overlay is 0.13–0.26 MB. No call failed.
+
+**Decisions**
+
+| Gate | Decision |
+|---|---|
+| S1 | Suggestion chips: Logo, QR code, Barcode, Face, Table, Checkbox, Seal. `id card` is allowed but not suggested. `handwriting` and `handwritten text` join the blocklist with the friendly message. |
+| S1, presets | `photograph` finds nothing; `photo` does. Change the preset prompt to `photo` and keep the label "Photograph". **`signature` is open:** it found nothing on any generated image. F1 hides signatures by default, so it has to be checked on real signed pages before F1a is built around it. If it still finds nothing, the fallback is a Muse vision box for the signature, which needs its own check. |
+| S2 | Use `text.format` with a strict JSON schema. Keep strict parsing, the schema check and the single repair attempt as a safety net. |
+| S3 | 93% ≥ 90% → **ship F1b** with model spans plus the regex backstop. Add "only private people's details, not business addresses" to the prompt. |
+| S4 | Passes at 24/24 with `muse-wonder-1.0` and a margin of 0.75 × box height. **F1c ships behind `REDACT_IMAGE_TEXT`, off by default**, until it passes on real photos. Spark is not used for boxes. |
+| S5 | **Ship F5.** Show the description next to SAM's label, because it corrects wrong labels. |
+| S6 | Keep the 60 s per-call timeout and the 150 s request budget. The worst chain (transcribe → spans → wonder boxes) is about 70 s. Overlay PNGs are under the 3 MB threshold, so **keep PNG for both images** (§5.4 of the expansion plan) and measure again on real photos, which compress worse. |
+
 ---
 
 ## 6. Submission Checklist
