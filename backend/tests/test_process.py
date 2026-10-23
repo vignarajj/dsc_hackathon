@@ -485,3 +485,35 @@ def test_image_text_not_found_or_failing_is_a_warning() -> None:
     assert none["redacted_png_base64"] is None
     assert none["warnings"] == ["Text in the picture could not be located, so it is not hidden."]
     assert none["shareable_text"] == "Mr [NAME], tel. [PHONE]"
+
+
+def test_custom_regions_are_segmented_after_the_presets() -> None:
+    class LogoGateway(FakeGateway):
+        async def segment(self, data_url: str, concept: str) -> list[Region]:
+            self.concepts.append(concept)
+            if concept == "logo":
+                return [Region(x=1, y=1, w=3, h=3, label="logo", score=0.8)]
+            return []
+
+    gateway = LogoGateway()
+    with TestClient(create_app(_settings(), gateway)) as client:
+        response = _post(client, concepts="stamp", custom="Logo, QR code", redact="logo")
+    assert response.status_code == 200
+    body = response.json()
+    assert gateway.concepts == ["stamp", "logo", "qr code"]
+    assert [box["label"] for box in body["boxes"]] == ["logo"]
+    assert body["palette"] == {"stamp": "#dc2626", "logo": "#7c3aed", "qr code": "#0d9488"}
+    assert body["warnings"] == []
+    hidden = Image.open(io.BytesIO(base64.b64decode(body["redacted_png_base64"])))
+    assert hidden.getpixel((2, 2)) == (0, 0, 0)
+
+
+def test_blocked_custom_region_is_rejected_before_any_model_call() -> None:
+    gateway = FakeGateway()
+    with TestClient(create_app(_settings(), gateway)) as client:
+        response = _post(client, custom="receipt")
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "SAM marks objects, not text. Try a stamp, logo, or QR code."
+    )
+    assert gateway.concepts == []

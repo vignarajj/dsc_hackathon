@@ -4,10 +4,14 @@ import { useEffect, useRef, useState, type DragEvent, type FormEvent } from "rea
 
 import { cleanedMarkdownName, markdownForCleanedText, overlayPngName } from "@/lib/cleaned-text";
 import {
+  CUSTOM_PALETTE,
+  CUSTOM_SUGGESTIONS,
   CancelledError,
   HIDEABLE_REGIONS,
+  MAX_CUSTOM,
   REGION_CONCEPTS,
   conceptsField,
+  customChoice,
   processImage,
   type ProcessResponse,
   redactField,
@@ -21,7 +25,6 @@ import { ShareSafe } from "./share-safe";
 
 type Status = "idle" | "loading" | "done" | "error";
 type RegionId = (typeof REGION_CONCEPTS)[number];
-type HideableId = (typeof HIDEABLE_REGIONS)[number];
 
 const REGION_LABELS: Record<RegionId, { label: string; swatch: string }> = {
   stamp: { label: "Stamp", swatch: "#dc2626" },
@@ -44,7 +47,7 @@ const ALL_REGIONS: Record<RegionId, boolean> = {
   rectangle: true,
 };
 
-const DEFAULT_HIDE: Record<HideableId, boolean> = {
+const DEFAULT_HIDE: Record<string, boolean> = {
   signature: true,
   photograph: true,
   stamp: false,
@@ -52,13 +55,29 @@ const DEFAULT_HIDE: Record<HideableId, boolean> = {
 
 type Choices = {
   concepts: string[];
+  custom: string[];
   redact: string;
   style: RedactStyle;
   text: boolean;
 };
 
 function choicesKey(choices: Choices): string {
-  return [conceptsField(choices.concepts), choices.redact, choices.style, choices.text].join("|");
+  return [
+    conceptsField(choices.concepts),
+    choices.custom.join(","),
+    choices.redact,
+    choices.style,
+    choices.text,
+  ].join("|");
+}
+
+function regionLabel(label: string): string {
+  const known = REGION_LABELS[label as RegionId];
+  if (known) {
+    return known.label;
+  }
+  const words = label.replace(/^qr\b/, "QR");
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 export function Cleaner({ apiBase }: { apiBase: string }) {
@@ -72,7 +91,10 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
   const [regions, setRegions] = useState<Record<RegionId, boolean>>(ALL_REGIONS);
   const [appliedConcepts, setAppliedConcepts] = useState<string | null>(null);
   const [appliedKey, setAppliedKey] = useState<string | null>(null);
-  const [hide, setHide] = useState<Record<HideableId, boolean>>(DEFAULT_HIDE);
+  const [hide, setHide] = useState<Record<string, boolean>>(DEFAULT_HIDE);
+  const [custom, setCustom] = useState<string[]>([]);
+  const [customDraft, setCustomDraft] = useState("");
+  const [customError, setCustomError] = useState<string | null>(null);
   const [style, setStyle] = useState<RedactStyle>("black");
   const [hideText, setHideText] = useState(true);
   const inFlight = useRef<AbortController | null>(null);
@@ -88,10 +110,12 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
   }, [previewUrl]);
 
   const selected = REGION_CONCEPTS.filter((id) => regions[id]);
-  const hidden = HIDEABLE_REGIONS.filter((id) => hide[id]);
+  const hideable = [...HIDEABLE_REGIONS, ...custom];
+  const hidden = hideable.filter((id) => hide[id]);
   const choices: Choices = {
     concepts: selected,
-    redact: redactField(hidden, selected),
+    custom,
+    redact: redactField(hidden, selected, custom),
     style,
     text: hideText,
   };
@@ -136,6 +160,37 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
     setRegions((current) => ({ ...current, [id]: !current[id] }));
   }
 
+  function addCustom(raw: string) {
+    const choice = customChoice(raw, custom);
+    if (choice.kind === "error") {
+      setCustomError(choice.message);
+      return;
+    }
+    if (choice.kind === "preset") {
+      setRegions((current) => ({ ...current, [choice.name]: true }));
+    } else {
+      setCustom((current) => [...current, choice.name]);
+    }
+    setCustomDraft("");
+    setCustomError(null);
+  }
+
+  function removeCustom(name: string) {
+    setCustom((current) => current.filter((item) => item !== name));
+    setHide((current) => ({ ...current, [name]: false }));
+    setCustomError(null);
+  }
+
+  function swatchFor(label: string): string {
+    const known = REGION_LABELS[label as RegionId];
+    if (known) {
+      return known.swatch;
+    }
+    const fromApi = result?.palette[label];
+    const index = custom.indexOf(label);
+    return fromApi ?? CUSTOM_PALETTE[Math.max(0, index) % CUSTOM_PALETTE.length];
+  }
+
   async function runClean() {
     if (!file || inFlight.current) {
       return;
@@ -150,13 +205,14 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
     try {
       const processed = await processImage(file, apiBase, {
         concepts: sent.concepts,
+        custom: sent.custom,
         redact: sent.redact.split(",").filter(Boolean),
         redactStyle: sent.style,
         redactText: sent.text,
         signal: controller.signal,
       });
       setResult(processed);
-      setAppliedConcepts(conceptsField(sent.concepts));
+      setAppliedConcepts([conceptsField(sent.concepts), ...sent.custom].filter(Boolean).join(","));
       setAppliedKey(choicesKey(sent));
       setStatus("done");
     } catch (caught) {
@@ -324,6 +380,79 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
                 {REGION_LABELS[id].label}
               </label>
             ))}
+            {custom.map((name) => (
+              <span
+                key={name}
+                className="flex items-center gap-2 rounded-full border border-line bg-paper py-1.5 pr-1.5 pl-3 text-sm"
+              >
+                <span
+                  className="inline-block h-2.5 w-2.5 rounded-full"
+                  style={{ backgroundColor: swatchFor(name) }}
+                  aria-hidden="true"
+                />
+                {regionLabel(name)}
+                <button
+                  type="button"
+                  onClick={() => removeCustom(name)}
+                  aria-label={`Remove ${name}`}
+                  className="rounded-full px-1.5 leading-none text-muted hover:text-foreground"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+          <div className="flex flex-col gap-2">
+            <label htmlFor="custom-region" className="text-sm text-muted">
+              Find something else (up to {MAX_CUSTOM})
+            </label>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                id="custom-region"
+                type="text"
+                value={customDraft}
+                maxLength={40}
+                placeholder="logo"
+                disabled={custom.length >= MAX_CUSTOM}
+                aria-describedby={customError ? "custom-error" : undefined}
+                aria-invalid={customError ? true : undefined}
+                onChange={(event) => {
+                  setCustomDraft(event.target.value);
+                  setCustomError(null);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    addCustom(customDraft);
+                  }
+                }}
+                className="w-44 rounded-full border border-line bg-paper px-3 py-1.5 text-sm disabled:opacity-50"
+              />
+              <button
+                type="button"
+                onClick={() => addCustom(customDraft)}
+                disabled={!customDraft.trim() || custom.length >= MAX_CUSTOM}
+                className="rounded-full border border-line px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Add
+              </button>
+              {CUSTOM_SUGGESTIONS.filter((name) => !custom.includes(name)).map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => addCustom(name)}
+                  disabled={custom.length >= MAX_CUSTOM}
+                  className="rounded-full border border-dashed border-line px-3 py-1 text-xs text-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  + {regionLabel(name)}
+                </button>
+              ))}
+            </div>
+            {customError ? (
+              <p id="custom-error" role="alert" className="text-sm text-stamp">
+                {customError}
+              </p>
+            ) : null}
           </div>
         </fieldset>
 
@@ -331,21 +460,24 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
           <legend className="text-sm font-medium">Share-safe copy</legend>
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm text-muted">Hide</span>
-            {HIDEABLE_REGIONS.map((id) => (
-              <label
-                key={id}
-                className="flex items-center gap-2 rounded-full border border-line bg-paper px-3 py-1.5 text-sm has-disabled:opacity-50"
-              >
-                <input
-                  type="checkbox"
-                  checked={hide[id] && regions[id]}
-                  disabled={!regions[id]}
-                  onChange={() => setHide((current) => ({ ...current, [id]: !current[id] }))}
-                  className="accent-stamp"
-                />
-                {REGION_LABELS[id].label}
-              </label>
-            ))}
+            {hideable.map((id) => {
+              const marked = custom.includes(id) || regions[id as RegionId];
+              return (
+                <label
+                  key={id}
+                  className="flex items-center gap-2 rounded-full border border-line bg-paper px-3 py-1.5 text-sm has-disabled:opacity-50"
+                >
+                  <input
+                    type="checkbox"
+                    checked={Boolean(hide[id]) && marked}
+                    disabled={!marked}
+                    onChange={() => setHide((current) => ({ ...current, [id]: !current[id] }))}
+                    className="accent-stamp"
+                  />
+                  {regionLabel(id)}
+                </label>
+              );
+            })}
             <span className="ml-2 text-sm text-muted" id="style-label">
               as
             </span>
@@ -481,7 +613,6 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
           {counts.length > 0 ? (
             <ul className="flex flex-wrap gap-2" aria-label="Regions found">
               {counts.map(({ label, count, bestScore }) => {
-                const known = REGION_LABELS[label as RegionId];
                 return (
                   <li
                     key={label}
@@ -489,10 +620,10 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
                   >
                     <span
                       className="inline-block h-2.5 w-2.5 rounded-full"
-                      style={{ backgroundColor: known.swatch }}
+                      style={{ backgroundColor: swatchFor(label) }}
                       aria-hidden="true"
                     />
-                    <span className="text-foreground">{known.label}</span>
+                    <span className="text-foreground">{regionLabel(label)}</span>
                     <span>
                       {count === 0 ? "none found" : `${count} found`}
                       {bestScore !== null ? ` · best ${Math.round(bestScore * 100)}%` : ""}

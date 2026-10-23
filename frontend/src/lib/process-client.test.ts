@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   CancelledError,
   conceptsField,
+  customChoice,
   parseProcessResponse,
   processImage,
   readErrorDetail,
@@ -285,5 +286,80 @@ describe("parseProcessResponse share-safe fields", () => {
     assert.equal(parsed.shareable_text, "Call [PHONE]");
     assert.equal(parsed.image_text_hidden, true);
     assert.deepEqual(parsed.warnings, ["No stamp was found, so none is hidden."]);
+  });
+});
+
+describe("customChoice", () => {
+  it("normalizes a custom name and maps preset names", () => {
+    assert.deepEqual(customChoice("  QR   Code ", []), { kind: "custom", name: "qr code" });
+    assert.deepEqual(customChoice("t-shirt", []), { kind: "custom", name: "t-shirt" });
+    assert.deepEqual(customChoice("Stamp", []), { kind: "preset", name: "stamp" });
+    assert.deepEqual(customChoice("photo", []), { kind: "preset", name: "photograph" });
+  });
+
+  it("rejects what the API would reject", () => {
+    const message = (raw: string, existing: string[] = []) => {
+      const choice = customChoice(raw, existing);
+      return choice.kind === "error" ? choice.message : "";
+    };
+    assert.match(message(""), /Type what to find/);
+    assert.match(message("company logo mark here"), /1 to 3 plain words/);
+    assert.match(message("qr code 2"), /1 to 3 plain words/);
+    assert.match(message("logo 🙂"), /1 to 3 plain words/);
+    assert.match(message("a".repeat(31)), /1 to 3 plain words/);
+    assert.match(message("Printed text"), /not text/);
+    assert.match(message("logo", ["logo"]), /already on the list/);
+    assert.match(message("face", ["logo", "qr code", "barcode"]), /up to 3/);
+  });
+});
+
+describe("custom regions in the request", () => {
+  it("sends custom names and lets them be hidden", async () => {
+    const file = new File([new Uint8Array([1])], "letter.png", { type: "image/png" });
+    let sent: FormData | null = null;
+    await processImage(file, "http://127.0.0.1:8000", {
+      concepts: ["signature"],
+      custom: ["logo", "qr code"],
+      redact: ["qr code", "signature", "face"],
+      fetchImpl: async (_input, init) => {
+        sent = init?.body as FormData;
+        return jsonResponse(200, {
+          boxes: [],
+          overlay_png_base64: overlay,
+          original_text: "",
+          cleaned_text: "",
+        });
+      },
+    });
+    const form = sent as unknown as FormData;
+    assert.equal(form.get("concepts"), "signature");
+    assert.equal(form.get("custom"), "logo,qr code");
+    assert.equal(form.get("redact"), "signature,qr code");
+  });
+
+  it("counts presets first, then custom regions in order", () => {
+    const boxes = [
+      { x: 0, y: 0, w: 1, h: 1, label: "qr code", score: 0.7 },
+      { x: 0, y: 0, w: 1, h: 1, label: "stamp", score: 0.9 },
+    ];
+    assert.deepEqual(
+      regionCounts(boxes, ["logo", "stamp", "qr code"]).map((row) => [row.label, row.count]),
+      [
+        ["stamp", 1],
+        ["logo", 0],
+        ["qr code", 1],
+      ],
+    );
+  });
+
+  it("keeps only well-formed palette colors", () => {
+    const parsed = parseProcessResponse({
+      boxes: [],
+      overlay_png_base64: overlay,
+      original_text: "",
+      cleaned_text: "",
+      palette: { logo: "#7c3aed", stamp: "red", "qr code": 3 },
+    });
+    assert.deepEqual(parsed.palette, { logo: "#7c3aed" });
   });
 });

@@ -23,6 +23,32 @@ _OUTLINE = {
 }
 _DEFAULT_FILL = (124, 58, 237, 110)
 _DEFAULT_OUTLINE = (109, 40, 217, 255)
+# Custom regions take these in the order they were asked for: purple, teal, pink.
+_CUSTOM_COLORS = (
+    ((124, 58, 237, 110), (109, 40, 217, 255)),
+    ((13, 148, 136, 110), (15, 118, 110, 255)),
+    ((219, 39, 119, 110), (190, 24, 93, 255)),
+)
+
+Colors = dict[str, tuple[tuple[int, int, int, int], tuple[int, int, int, int]]]
+
+
+def region_colors(labels: tuple[str, ...]) -> Colors:
+    """Fill and outline for each label. Presets keep theirs; others go in order."""
+    colors: Colors = {}
+    custom = 0
+    for label in labels:
+        if label in _FILL:
+            colors[label] = (_FILL[label], _OUTLINE[label])
+            continue
+        colors[label] = _CUSTOM_COLORS[custom % len(_CUSTOM_COLORS)]
+        custom += 1
+    return colors
+
+
+def palette(colors: Colors) -> dict[str, str]:
+    """The fill color of each label as #rrggbb, for the page legend."""
+    return {label: "#{:02x}{:02x}{:02x}".format(*fill[:3]) for label, (fill, _) in colors.items()}
 
 
 @dataclass(frozen=True)
@@ -67,12 +93,16 @@ def prepare_image(image_bytes: bytes, content_type: str, max_edge: int) -> Prepa
     return PreparedImage(image=image, data_url=f"data:{mime};base64,{payload}")
 
 
-def render_overlay(image: Image.Image, regions: list[Region]) -> bytes:
+def render_overlay(
+    image: Image.Image, regions: list[Region], colors: Colors | None = None
+) -> bytes:
     """Draw each mask at its box origin, scaled to the box, then outline the box."""
+    if colors is None:
+        colors = region_colors(tuple(dict.fromkeys(region.label for region in regions)))
     base = image.convert("RGBA")
     layer = Image.new("RGBA", base.size, (0, 0, 0, 0))
     for region in regions:
-        raster_image = _raster_image(region)
+        raster_image = _raster_image(region, colors)
         if raster_image is None:
             continue
         scaled = raster_image.resize((region.w, region.h), Image.Resampling.NEAREST)
@@ -92,7 +122,7 @@ def render_overlay(image: Image.Image, regions: list[Region]) -> bytes:
         if clamped is None:
             continue
         x, y, w, h = clamped
-        outline = _OUTLINE.get(region.label, _DEFAULT_OUTLINE)
+        outline = colors[region.label][1] if region.label in colors else _DEFAULT_OUTLINE
         draw.rectangle((x, y, x + w - 1, y + h - 1), outline=outline, width=stroke)
 
     buffer = io.BytesIO()
@@ -136,9 +166,10 @@ def region_mask(region: Region) -> Image.Image | None:
     return Image.frombytes("L", size, region.raster).point(lambda value: 255 if value else 0)
 
 
-def _raster_image(region: Region) -> Image.Image | None:
+def _raster_image(region: Region, colors: Colors) -> Image.Image | None:
     alpha = region_mask(region)
     if alpha is None:
         return None
-    fill = Image.new("RGBA", alpha.size, _FILL.get(region.label, _DEFAULT_FILL))
+    color = colors[region.label][0] if region.label in colors else _DEFAULT_FILL
+    fill = Image.new("RGBA", alpha.size, color)
     return Image.composite(fill, Image.new("RGBA", alpha.size, (0, 0, 0, 0)), alpha)

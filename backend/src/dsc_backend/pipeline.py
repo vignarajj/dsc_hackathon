@@ -4,12 +4,13 @@ import logging
 from collections.abc import Awaitable
 from dataclasses import dataclass, field
 
-from dsc_backend.config import DEFAULT_CONCEPTS, Settings
+from dsc_backend.config import Settings
 from dsc_backend.errors import PipelineError
-from dsc_backend.imaging import prepare_image, render_overlay
+from dsc_backend.form import Redaction
+from dsc_backend.imaging import palette, prepare_image, region_colors, render_overlay
 from dsc_backend.meta import MetaGateway
 from dsc_backend.privacy import Span, mask_text, merge_spans, occurs, pattern_spans, surnames
-from dsc_backend.redaction import REDACT_STYLES, render_redacted
+from dsc_backend.redaction import render_redacted
 from dsc_backend.regions import Region, clamp_box
 
 logger = logging.getLogger(__name__)
@@ -32,72 +33,12 @@ class ProcessResult:
     original_text: str
     cleaned_text: str
     models: dict[str, str]
+    palette: dict[str, str] = field(default_factory=dict)
     redacted_png_base64: str | None = None
     sensitive: list[Span] = field(default_factory=list)
     shareable_text: str | None = None
     image_text_hidden: bool = False
     warnings: list[str] = field(default_factory=list)
-
-
-@dataclass(frozen=True)
-class Redaction:
-    labels: tuple[str, ...] = ()
-    style: str = "black"
-    text: bool = False
-
-
-_TRUE = {"true", "1", "yes", "on"}
-_FALSE = {"false", "0", "no", "off", ""}
-
-
-def concepts_for_request(raw: str | None, default: tuple[str, ...]) -> tuple[str, ...]:
-    """Turn the form field into SAM prompts.
-
-    A missing field uses the server default. An empty field segments nothing.
-    Names outside the known four are rejected so the client cannot invent prompts.
-    """
-    if raw is None:
-        return default
-    allowed = set(DEFAULT_CONCEPTS)
-    chosen: set[str] = set()
-    for part in raw.split(","):
-        name = part.strip().lower()
-        if not name:
-            continue
-        if name not in allowed:
-            raise PipelineError(
-                400,
-                "Unknown region. Choose stamp, signature, photograph, or rectangle.",
-            )
-        chosen.add(name)
-    return tuple(concept for concept in DEFAULT_CONCEPTS if concept in chosen)
-
-
-def redaction_for_request(
-    raw_labels: str | None,
-    raw_style: str | None,
-    concepts: tuple[str, ...],
-    raw_text: str | None = None,
-) -> Redaction:
-    """Read which marked regions to hide, and how.
-
-    Only regions that are also marked can be hidden, so the page never offers
-    a share-safe copy built from regions nobody looked for.
-    """
-    labels = concepts_for_request(raw_labels or "", DEFAULT_CONCEPTS)
-    missing = [label for label in labels if label not in concepts]
-    if missing:
-        raise PipelineError(
-            400,
-            f"Only marked regions can be hidden. Mark {missing[0]} as well, or stop hiding it.",
-        )
-    style = (raw_style or "black").strip().lower()
-    if style not in REDACT_STYLES:
-        raise PipelineError(400, "Hidden regions can be black or blur.")
-    flag = (raw_text or "").strip().lower()
-    if flag not in _TRUE | _FALSE:
-        raise PipelineError(400, "redact_text must be true or false.")
-    return Redaction(labels=labels, style=style, text=flag in _TRUE)
 
 
 async def process_image(
@@ -165,7 +106,8 @@ async def process_image(
     except ExceptionGroup as group:
         raise _from_group(group) from group
     cleaned_text = proofread_task.result()
-    overlay = render_overlay(prepared.image, regions)
+    colors = region_colors(selected)
+    overlay = render_overlay(prepared.image, regions, colors)
 
     sensitive: list[Span] = []
     shareable_text: str | None = None
@@ -216,6 +158,7 @@ async def process_image(
             "signatures": settings.muse_signature_model,
             **({"text_boxes": settings.muse_text_box_model} if settings.redact_image_text else {}),
         },
+        palette=palette(colors),
         redacted_png_base64=(
             base64.b64encode(redacted).decode("ascii") if redacted is not None else None
         ),
