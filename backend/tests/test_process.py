@@ -8,6 +8,7 @@ from PIL import Image
 from dsc_backend.config import Settings
 from dsc_backend.errors import PipelineError
 from dsc_backend.main import create_app
+from dsc_backend.privacy import Span
 from dsc_backend.regions import Region
 
 
@@ -351,3 +352,82 @@ def test_hidden_regions_must_be_marked_and_the_style_known() -> None:
     assert style.status_code == 400
     assert style.json()["detail"] == "Hidden regions can be black or blur."
     assert gateway.concepts == []
+
+
+class SensitiveGateway(FakeGateway):
+    def __init__(self, spans: list[Span] | Exception, **kwargs: object) -> None:
+        super().__init__(transcript="Mr Tom Reed, tel 07911 123456", **kwargs)  # type: ignore[arg-type]
+        self.spans = spans
+        self.span_calls = 0
+
+    async def proofread(self, text: str) -> str:
+        self.proofread_calls += 1
+        return "Mr Tom Reed, tel. 07911 123456"
+
+    async def sensitive_spans(self, text: str) -> list[Span]:
+        self.span_calls += 1
+        assert text == self.transcript
+        if isinstance(self.spans, Exception):
+            raise self.spans
+        return self.spans
+
+
+def test_sensitive_text_is_masked_in_the_shareable_text() -> None:
+    gateway = SensitiveGateway([Span("name", "Tom Reed", "model")])
+    with TestClient(create_app(_settings(), gateway)) as client:
+        response = _post(client, redact_text="true")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["shareable_text"] == "Mr [NAME], tel. [PHONE]"
+    assert body["sensitive"] == [
+        {"category": "name", "text": "Tom Reed", "source": "model"},
+        {"category": "phone", "text": "07911 123456", "source": "pattern"},
+    ]
+    assert body["cleaned_text"] == "Mr Tom Reed, tel. 07911 123456"
+    assert body["warnings"] == []
+    assert body["redacted_png_base64"] is None
+
+
+def test_model_span_failure_keeps_the_pattern_spans() -> None:
+    gateway = SensitiveGateway(PipelineError(502, "The model request failed"))
+    with TestClient(create_app(_settings(), gateway)) as client:
+        response = _post(client, redact_text="true")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["shareable_text"] == "Mr Tom Reed, tel. [PHONE]"
+    assert len(body["warnings"]) == 1
+    assert "only phone numbers" in body["warnings"][0]
+
+
+def test_span_the_proofread_reworded_adds_a_warning() -> None:
+    gateway = SensitiveGateway([Span("name", "Mr Tom Reed,", "model")])
+
+    async def reworded(text: str) -> str:
+        return "Mister Tom Reed, tel. 07911 123456"
+
+    gateway.proofread = reworded  # type: ignore[method-assign]
+    with TestClient(create_app(_settings(), gateway)) as client:
+        body = _post(client, redact_text="true").json()
+    assert "could not be matched after proofreading" in body["warnings"][0]
+    # The surname still stands alone, so it is masked even though the full span moved.
+    assert body["shareable_text"] == "Mister Tom [NAME], tel. [PHONE]"
+
+
+def test_text_is_not_checked_unless_asked() -> None:
+    gateway = SensitiveGateway([])
+    with TestClient(create_app(_settings(), gateway)) as client:
+        body = _post(client).json()
+        bad = _post(client, redact_text="maybe")
+    assert gateway.span_calls == 0
+    assert body["sensitive"] == []
+    assert body["shareable_text"] is None
+    assert bad.status_code == 400
+
+
+def test_empty_transcript_gives_empty_shareable_text() -> None:
+    gateway = SensitiveGateway([])
+    gateway.transcript = " "
+    with TestClient(create_app(_settings(), gateway)) as client:
+        body = _post(client, redact_text="true").json()
+    assert gateway.span_calls == 0
+    assert body["shareable_text"] == ""
