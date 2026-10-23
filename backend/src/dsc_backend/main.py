@@ -12,6 +12,7 @@ from dsc_backend.errors import PipelineError
 from dsc_backend.form import (
     concepts_for_request,
     custom_concepts_for_request,
+    flag_for_request,
     redaction_for_request,
 )
 from dsc_backend.meta import MetaGateway, OpenAIGateway
@@ -25,6 +26,19 @@ class SpanModel(BaseModel):
     category: str
     text: str
     source: str
+
+
+class FieldModel(BaseModel):
+    label: str
+    value: str
+    found_in_text: bool
+
+
+class DocumentModel(BaseModel):
+    type: str
+    title: str
+    summary: str
+    fields: list[FieldModel]
 
 
 class BoxModel(BaseModel):
@@ -47,6 +61,7 @@ class ProcessResponse(BaseModel):
     sensitive: list[SpanModel]
     shareable_text: str | None
     image_text_hidden: bool
+    document: DocumentModel | None
     warnings: list[str]
 
 
@@ -92,6 +107,7 @@ def create_app(
         redact: str | None = Form(default=None),
         redact_style: str | None = Form(default=None),
         redact_text: str | None = Form(default=None),
+        extract: str | None = Form(default=None),
     ) -> ProcessResult:
         settings_for_request: Settings = request.app.state.settings
         client = request.client.host if request.client else "unknown"
@@ -103,6 +119,7 @@ def create_app(
             custom, concepts_for_request(concepts, settings_for_request.sam_concepts)
         )
         redaction = redaction_for_request(redact, redact_style, selected, redact_text)
+        wants_document = flag_for_request(extract, "extract")
         return await process_image(
             image_bytes,
             content_type,
@@ -110,6 +127,7 @@ def create_app(
             settings_for_request,
             selected,
             redaction,
+            wants_document,
         )
 
     return app

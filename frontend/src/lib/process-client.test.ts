@@ -231,6 +231,7 @@ describe("share-safe request fields", () => {
     assert.equal(form.get("redact"), "signature");
     assert.equal(form.get("redact_style"), "blur");
     assert.equal(form.get("redact_text"), "true");
+    assert.equal(form.get("extract"), "false");
   });
 
   it("defaults to no hiding, black, and no text check", async () => {
@@ -263,6 +264,7 @@ describe("parseProcessResponse share-safe fields", () => {
     assert.deepEqual(parsed.sensitive, []);
     assert.equal(parsed.shareable_text, null);
     assert.equal(parsed.image_text_hidden, false);
+    assert.equal(parsed.document, null);
     assert.deepEqual(parsed.warnings, []);
   });
 

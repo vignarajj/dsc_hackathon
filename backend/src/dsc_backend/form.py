@@ -111,11 +111,17 @@ def redaction_for_request(
     style = (raw_style or "black").strip().lower()
     if style not in REDACT_STYLES:
         raise PipelineError(400, "Hidden regions can be black or blur.")
-    flag = (raw_text or "").strip().lower()
-    if flag not in _TRUE | _FALSE:
-        raise PipelineError(400, "redact_text must be true or false.")
+    text = flag_for_request(raw_text, "redact_text")
     labels = tuple(concept for concept in concepts if concept in wanted)
-    return Redaction(labels=labels, style=style, text=flag in _TRUE)
+    return Redaction(labels=labels, style=style, text=text)
+
+
+def flag_for_request(raw: str | None, name: str) -> bool:
+    """Read a true/false form field. Missing or empty is false."""
+    flag = (raw or "").strip().lower()
+    if flag not in _TRUE | _FALSE:
+        raise PipelineError(400, f"{name} must be true or false.")
+    return flag in _TRUE
 
 
 def _normal(name: str) -> str:

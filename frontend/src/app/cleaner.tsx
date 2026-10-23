@@ -21,6 +21,7 @@ import {
 } from "@/lib/process-client";
 import { textChanges, type TextChange } from "@/lib/text-diff";
 
+import { DocumentData } from "./document-data";
 import { ShareSafe } from "./share-safe";
 
 type Status = "idle" | "loading" | "done" | "error";
@@ -59,6 +60,7 @@ type Choices = {
   redact: string;
   style: RedactStyle;
   text: boolean;
+  extract: boolean;
 };
 
 function choicesKey(choices: Choices): string {
@@ -68,6 +70,7 @@ function choicesKey(choices: Choices): string {
     choices.redact,
     choices.style,
     choices.text,
+    choices.extract,
   ].join("|");
 }
 
@@ -97,6 +100,7 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
   const [customError, setCustomError] = useState<string | null>(null);
   const [style, setStyle] = useState<RedactStyle>("black");
   const [hideText, setHideText] = useState(true);
+  const [extract, setExtract] = useState(true);
   const inFlight = useRef<AbortController | null>(null);
 
   useEffect(() => () => inFlight.current?.abort(), []);
@@ -118,6 +122,7 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
     redact: redactField(hidden, selected, custom),
     style,
     text: hideText,
+    extract,
   };
   const selectionChanged = result !== null && appliedKey !== choicesKey(choices);
 
@@ -209,6 +214,7 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
         redact: sent.redact.split(",").filter(Boolean),
         redactStyle: sent.style,
         redactText: sent.text,
+        extract: sent.extract,
         signal: controller.signal,
       });
       setResult(processed);
@@ -513,6 +519,16 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
             Only marked regions can be hidden. Black is safer than blur.
           </p>
         </fieldset>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={extract}
+            disabled={status === "loading"}
+            onChange={() => setExtract((current) => !current)}
+            className="accent-stamp"
+          />
+          Pull out the document type and key fields
+        </label>
         {selectionChanged ? (
           <p role="status" className="text-sm text-muted">
             Clean again to apply these choices.
@@ -638,6 +654,7 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
           {file ? (
             <ShareSafe result={result} fileName={file.name} originalUrl={previewUrl} />
           ) : null}
+          {file ? <DocumentData result={result} fileName={file.name} /> : null}
           <Reading result={result} file={file} notice={notice} onCopy={copyText} onDownload={downloadText} />
           {result.models ? (
             <p className="text-xs text-muted">
