@@ -1,8 +1,8 @@
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
-// The API can spend 60 s on segmentation and transcription, then 60 s on the
-// proofread. Give it that plus some headroom before the page gives up.
-export const REQUEST_TIMEOUT_MS = 150_000;
+// The API can spend 60 s on segmentation and transcription, 60 s on the
+// proofread, and 60 s finding sensitive text in the picture when that is on.
+export const REQUEST_TIMEOUT_MS = 180_000;
 
 export type ProcessBox = {
   x: number;
@@ -17,6 +17,13 @@ export type ProcessModels = {
   segmentation: string;
   transcription: string;
   proofread: string;
+  signatures: string | null;
+};
+
+export type SensitiveItem = {
+  category: string;
+  text: string;
+  source: string;
 };
 
 export type ProcessResponse = {
@@ -25,7 +32,14 @@ export type ProcessResponse = {
   original_text: string;
   cleaned_text: string;
   models: ProcessModels | null;
+  redacted_png_base64: string | null;
+  sensitive: SensitiveItem[];
+  shareable_text: string | null;
+  image_text_hidden: boolean;
+  warnings: string[];
 };
+
+export type RedactStyle = "black" | "blur";
 
 export type RegionCount = {
   label: string;
@@ -43,10 +57,16 @@ export class CancelledError extends Error {
 
 export const REGION_CONCEPTS = ["stamp", "signature", "photograph", "rectangle"] as const;
 
+/** Regions the share-safe copy can hide. Rectangles are layout, not private. */
+export const HIDEABLE_REGIONS = ["signature", "photograph", "stamp"] as const;
+
 const ACCEPTED_TYPES = new Set(["image/jpeg", "image/jpg", "image/png"]);
 
 export type ProcessRequest = {
   concepts?: readonly string[];
+  redact?: readonly string[];
+  redactStyle?: RedactStyle;
+  redactText?: boolean;
   fetchImpl?: typeof fetch;
   signal?: AbortSignal;
   timeoutMs?: number;
@@ -105,6 +125,16 @@ export function parseProcessResponse(body: unknown): ProcessResponse {
     original_text: record.original_text,
     cleaned_text: record.cleaned_text,
     models: parseModels(record.models),
+    redacted_png_base64:
+      typeof record.redacted_png_base64 === "string" && record.redacted_png_base64.length > 0
+        ? record.redacted_png_base64
+        : null,
+    sensitive: Array.isArray(record.sensitive) ? record.sensitive.flatMap(parseSensitive) : [],
+    shareable_text: typeof record.shareable_text === "string" ? record.shareable_text : null,
+    image_text_hidden: record.image_text_hidden === true,
+    warnings: Array.isArray(record.warnings)
+      ? record.warnings.filter((item): item is string => typeof item === "string")
+      : [],
   };
 }
 
@@ -129,6 +159,17 @@ export function conceptsField(concepts: readonly string[] | undefined): string {
   return REGION_CONCEPTS.filter((concept) => source.includes(concept)).join(",");
 }
 
+/** The regions to hide, limited to the marked ones, since the API rejects the rest. */
+export function redactField(
+  redact: readonly string[] | undefined,
+  concepts: readonly string[] | undefined,
+): string {
+  const marked = conceptsField(concepts).split(",");
+  return REGION_CONCEPTS.filter(
+    (concept) => (redact ?? []).includes(concept) && marked.includes(concept),
+  ).join(",");
+}
+
 export async function processImage(
   file: File,
   apiBase: string,
@@ -143,6 +184,9 @@ export async function processImage(
   const body = new FormData();
   body.append("image", file);
   body.append("concepts", conceptsField(request.concepts));
+  body.append("redact", redactField(request.redact, request.concepts));
+  body.append("redact_style", request.redactStyle ?? "black");
+  body.append("redact_text", request.redactText ? "true" : "false");
   const endpoint = `${apiBase.replace(/\/$/, "")}/api/process`;
   const timer = new AbortController();
   const timeoutId = setTimeout(() => timer.abort(), request.timeoutMs ?? REQUEST_TIMEOUT_MS);
@@ -218,6 +262,7 @@ function parseModels(value: unknown): ProcessModels | null {
     segmentation: models.segmentation,
     transcription: models.transcription,
     proofread: models.proofread,
+    signatures: typeof models.signatures === "string" ? models.signatures : null,
   };
 }
 
@@ -237,4 +282,19 @@ function parseBox(value: unknown): ProcessBox[] {
   }
   const score = typeof box.score === "number" ? box.score : null;
   return [{ x: box.x, y: box.y, w: box.w, h: box.h, label: box.label, score }];
+}
+
+function parseSensitive(value: unknown): SensitiveItem[] {
+  if (!value || typeof value !== "object") {
+    return [];
+  }
+  const item = value as Record<string, unknown>;
+  if (
+    typeof item.category !== "string" ||
+    typeof item.text !== "string" ||
+    typeof item.source !== "string"
+  ) {
+    return [];
+  }
+  return [{ category: item.category, text: item.text, source: item.source }];
 }

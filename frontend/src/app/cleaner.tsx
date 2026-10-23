@@ -5,17 +5,23 @@ import { useEffect, useRef, useState, type DragEvent, type FormEvent } from "rea
 import { cleanedMarkdownName, markdownForCleanedText, overlayPngName } from "@/lib/cleaned-text";
 import {
   CancelledError,
+  HIDEABLE_REGIONS,
   REGION_CONCEPTS,
   conceptsField,
   processImage,
   type ProcessResponse,
+  redactField,
+  type RedactStyle,
   regionCounts,
   validateImageFile,
 } from "@/lib/process-client";
 import { textChanges, type TextChange } from "@/lib/text-diff";
 
+import { ShareSafe } from "./share-safe";
+
 type Status = "idle" | "loading" | "done" | "error";
 type RegionId = (typeof REGION_CONCEPTS)[number];
+type HideableId = (typeof HIDEABLE_REGIONS)[number];
 
 const REGION_LABELS: Record<RegionId, { label: string; swatch: string }> = {
   stamp: { label: "Stamp", swatch: "#dc2626" },
@@ -26,9 +32,9 @@ const REGION_LABELS: Record<RegionId, { label: string; swatch: string }> = {
 
 const STEPS = [
   "Choose a JPEG or PNG up to 10 MB. A page photo, a chat, or a phone screenshot all work.",
-  "Leave on the regions you want marked, then press Clean screenshot. Reading the image can take up to a minute.",
+  "Leave on the regions you want marked and choose what the share-safe copy hides. Then press Clean screenshot. It can take up to a minute.",
   "Compare the original with the overlay. Each kind of region has its own color.",
-  "Read the transcription beside the proofread. Copy the cleaned text, or download it as Markdown.",
+  "Drag the slider to check the share-safe copy, then download it. Copy the cleaned or the shareable text.",
 ] as const;
 
 const ALL_REGIONS: Record<RegionId, boolean> = {
@@ -37,6 +43,23 @@ const ALL_REGIONS: Record<RegionId, boolean> = {
   photograph: true,
   rectangle: true,
 };
+
+const DEFAULT_HIDE: Record<HideableId, boolean> = {
+  signature: true,
+  photograph: true,
+  stamp: false,
+};
+
+type Choices = {
+  concepts: string[];
+  redact: string;
+  style: RedactStyle;
+  text: boolean;
+};
+
+function choicesKey(choices: Choices): string {
+  return [conceptsField(choices.concepts), choices.redact, choices.style, choices.text].join("|");
+}
 
 export function Cleaner({ apiBase }: { apiBase: string }) {
   const [file, setFile] = useState<File | null>(null);
@@ -48,6 +71,10 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
   const [dragging, setDragging] = useState(false);
   const [regions, setRegions] = useState<Record<RegionId, boolean>>(ALL_REGIONS);
   const [appliedConcepts, setAppliedConcepts] = useState<string | null>(null);
+  const [appliedKey, setAppliedKey] = useState<string | null>(null);
+  const [hide, setHide] = useState<Record<HideableId, boolean>>(DEFAULT_HIDE);
+  const [style, setStyle] = useState<RedactStyle>("black");
+  const [hideText, setHideText] = useState(true);
   const inFlight = useRef<AbortController | null>(null);
 
   useEffect(() => () => inFlight.current?.abort(), []);
@@ -61,13 +88,20 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
   }, [previewUrl]);
 
   const selected = REGION_CONCEPTS.filter((id) => regions[id]);
-  const selection = conceptsField(selected);
-  const selectionChanged = result !== null && appliedConcepts !== selection;
+  const hidden = HIDEABLE_REGIONS.filter((id) => hide[id]);
+  const choices: Choices = {
+    concepts: selected,
+    redact: redactField(hidden, selected),
+    style,
+    text: hideText,
+  };
+  const selectionChanged = result !== null && appliedKey !== choicesKey(choices);
 
   function chooseFile(next: File | null) {
     setResult(null);
     setNotice(null);
     setAppliedConcepts(null);
+    setAppliedKey(null);
     if (!next) {
       setFile(null);
       setPreviewUrl(null);
@@ -106,7 +140,7 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
     if (!file || inFlight.current) {
       return;
     }
-    const concepts = REGION_CONCEPTS.filter((id) => regions[id]);
+    const sent = choices;
     const controller = new AbortController();
     inFlight.current = controller;
     setStatus("loading");
@@ -115,11 +149,15 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
     setResult(null);
     try {
       const processed = await processImage(file, apiBase, {
-        concepts,
+        concepts: sent.concepts,
+        redact: sent.redact.split(",").filter(Boolean),
+        redactStyle: sent.style,
+        redactText: sent.text,
         signal: controller.signal,
       });
       setResult(processed);
-      setAppliedConcepts(conceptsField(concepts));
+      setAppliedConcepts(conceptsField(sent.concepts));
+      setAppliedKey(choicesKey(sent));
       setStatus("done");
     } catch (caught) {
       if (caught instanceof CancelledError) {
@@ -288,9 +326,64 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
             ))}
           </div>
         </fieldset>
+
+        <fieldset disabled={status === "loading"} className="flex flex-col gap-3">
+          <legend className="text-sm font-medium">Share-safe copy</legend>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-muted">Hide</span>
+            {HIDEABLE_REGIONS.map((id) => (
+              <label
+                key={id}
+                className="flex items-center gap-2 rounded-full border border-line bg-paper px-3 py-1.5 text-sm has-disabled:opacity-50"
+              >
+                <input
+                  type="checkbox"
+                  checked={hide[id] && regions[id]}
+                  disabled={!regions[id]}
+                  onChange={() => setHide((current) => ({ ...current, [id]: !current[id] }))}
+                  className="accent-stamp"
+                />
+                {REGION_LABELS[id].label}
+              </label>
+            ))}
+            <span className="ml-2 text-sm text-muted" id="style-label">
+              as
+            </span>
+            <div role="radiogroup" aria-labelledby="style-label" className="flex gap-2">
+              {(["black", "blur"] as const).map((option) => (
+                <label
+                  key={option}
+                  className="flex items-center gap-2 rounded-full border border-line bg-paper px-3 py-1.5 text-sm"
+                >
+                  <input
+                    type="radio"
+                    name="redact-style"
+                    value={option}
+                    checked={style === option}
+                    onChange={() => setStyle(option)}
+                    className="accent-stamp"
+                  />
+                  {option === "black" ? "Black box" : "Blur"}
+                </label>
+              ))}
+            </div>
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={hideText}
+              onChange={() => setHideText((current) => !current)}
+              className="accent-stamp"
+            />
+            Also hide phone numbers, emails, names, and ID numbers in the text
+          </label>
+          <p className="text-xs text-muted">
+            Only marked regions can be hidden. Black is safer than blur.
+          </p>
+        </fieldset>
         {selectionChanged ? (
           <p role="status" className="text-sm text-muted">
-            Clean again to apply the region choice.
+            Clean again to apply these choices.
           </p>
         ) : null}
 
@@ -342,6 +435,16 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
 
       {status === "done" && result && previewUrl ? (
         <section className="mt-10 flex flex-col gap-6">
+          {result.warnings.length > 0 ? (
+            <ul
+              aria-label="Notes about this result"
+              className="flex flex-col gap-1 rounded-2xl border border-line bg-paper px-4 py-3 text-sm text-muted"
+            >
+              {result.warnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          ) : null}
           <div className="grid items-start gap-4 md:grid-cols-2">
             <figure className="flex flex-col gap-3 rounded-3xl border border-line bg-paper p-4">
               <figcaption className="flex min-h-7 items-center text-[11px] font-medium tracking-[0.18em] text-muted uppercase">
@@ -401,11 +504,17 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
           ) : (
             <p className="text-sm text-muted">No regions were requested, so the overlay has no masks.</p>
           )}
+          {file ? (
+            <ShareSafe result={result} fileName={file.name} originalUrl={previewUrl} />
+          ) : null}
           <Reading result={result} file={file} notice={notice} onCopy={copyText} onDownload={downloadText} />
           {result.models ? (
             <p className="text-xs text-muted">
               Segmented with {result.models.segmentation}. Transcribed with{" "}
               {result.models.transcription}. Proofread with {result.models.proofread}.
+              {result.models.signatures
+                ? ` Signatures located with ${result.models.signatures}.`
+                : ""}
             </p>
           ) : null}
         </section>

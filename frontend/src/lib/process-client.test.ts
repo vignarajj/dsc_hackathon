@@ -7,6 +7,7 @@ import {
   parseProcessResponse,
   processImage,
   readErrorDetail,
+  redactField,
   regionCounts,
   validateImageFile,
 } from "./process-client.ts";
@@ -154,6 +155,7 @@ describe("parseProcessResponse models", () => {
       segmentation: "sam-3.1",
       transcription: "muse-spark-1.3",
       proofread: "muse-wonder-1.0",
+      signatures: null,
     });
   });
 });
@@ -196,5 +198,92 @@ describe("processImage abort", () => {
     });
     controller.abort();
     await assert.rejects(pending, CancelledError);
+  });
+});
+
+describe("share-safe request fields", () => {
+  it("only hides regions that are also marked, in the canonical order", () => {
+    assert.equal(redactField(["photograph", "signature", "face"], undefined), "signature,photograph");
+    assert.equal(redactField(["signature", "stamp"], ["stamp"]), "stamp");
+    assert.equal(redactField(undefined, ["stamp"]), "");
+  });
+
+  it("sends the hide list, style, and text flag", async () => {
+    const file = new File([new Uint8Array([1])], "form.png", { type: "image/png" });
+    let sent: FormData | null = null;
+    await processImage(file, "http://127.0.0.1:8000", {
+      concepts: ["signature", "stamp"],
+      redact: ["photograph", "signature"],
+      redactStyle: "blur",
+      redactText: true,
+      fetchImpl: async (_input, init) => {
+        sent = init?.body as FormData;
+        return jsonResponse(200, {
+          boxes: [],
+          overlay_png_base64: overlay,
+          original_text: "",
+          cleaned_text: "",
+        });
+      },
+    });
+    const form = sent as unknown as FormData;
+    assert.equal(form.get("redact"), "signature");
+    assert.equal(form.get("redact_style"), "blur");
+    assert.equal(form.get("redact_text"), "true");
+  });
+
+  it("defaults to no hiding, black, and no text check", async () => {
+    const file = new File([new Uint8Array([1])], "form.png", { type: "image/png" });
+    let sent: FormData | null = null;
+    await processImage(file, "http://127.0.0.1:8000", {
+      fetchImpl: async (_input, init) => {
+        sent = init?.body as FormData;
+        return jsonResponse(200, {
+          boxes: [],
+          overlay_png_base64: overlay,
+          original_text: "",
+          cleaned_text: "",
+        });
+      },
+    });
+    const form = sent as unknown as FormData;
+    assert.equal(form.get("redact"), "");
+    assert.equal(form.get("redact_style"), "black");
+    assert.equal(form.get("redact_text"), "false");
+  });
+});
+
+describe("parseProcessResponse share-safe fields", () => {
+  const base = { boxes: [], overlay_png_base64: overlay, original_text: "a", cleaned_text: "a" };
+
+  it("defaults the fields an older API does not send", () => {
+    const parsed = parseProcessResponse(base);
+    assert.equal(parsed.redacted_png_base64, null);
+    assert.deepEqual(parsed.sensitive, []);
+    assert.equal(parsed.shareable_text, null);
+    assert.equal(parsed.image_text_hidden, false);
+    assert.deepEqual(parsed.warnings, []);
+  });
+
+  it("keeps well-formed values and drops malformed items", () => {
+    const parsed = parseProcessResponse({
+      ...base,
+      redacted_png_base64: overlay,
+      sensitive: [
+        { category: "phone", text: "07911 123456", source: "pattern" },
+        { category: "name", text: 7, source: "model" },
+        "junk",
+      ],
+      shareable_text: "Call [PHONE]",
+      image_text_hidden: true,
+      warnings: ["No stamp was found, so none is hidden.", 3],
+    });
+    assert.equal(parsed.redacted_png_base64, overlay);
+    assert.deepEqual(parsed.sensitive, [
+      { category: "phone", text: "07911 123456", source: "pattern" },
+    ]);
+    assert.equal(parsed.shareable_text, "Call [PHONE]");
+    assert.equal(parsed.image_text_hidden, true);
+    assert.deepEqual(parsed.warnings, ["No stamp was found, so none is hidden."]);
   });
 });
