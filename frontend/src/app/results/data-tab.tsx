@@ -6,11 +6,29 @@ import { dataCsvName, dataJsonName } from "@/lib/cleaned-text";
 import { dataJson, documentTypeLabel, fieldsCsv } from "@/lib/exports";
 import type { ProcessResponse } from "@/lib/process-client";
 
-export function DocumentData({ result, fileName }: { result: ProcessResponse; fileName: string }) {
+import { EmptyTab } from "./empty-tab";
+
+export function DataTab({
+  result,
+  fileName,
+  requested,
+}: {
+  result: ProcessResponse;
+  fileName: string;
+  requested: boolean;
+}) {
   const [notice, setNotice] = useState<string | null>(null);
   const document = result.document;
   if (!document) {
-    return null;
+    return (
+      <EmptyTab title="Document data">
+        {!requested
+          ? "Data was not requested. Tick “Pull out the document type and key fields”, then clean again."
+          : result.original_text.trim()
+            ? "The fields could not be read this time. The note above says why. Clean again to retry."
+            : "No text was found in this image, so there are no fields to show."}
+      </EmptyTab>
+    );
   }
   const ungrounded = document.fields.filter((field) => !field.found_in_text).length;
 

@@ -2,9 +2,7 @@
 
 import { useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
 
-import { cleanedMarkdownName, markdownForCleanedText, overlayPngName } from "@/lib/cleaned-text";
 import {
-  CUSTOM_PALETTE,
   CUSTOM_SUGGESTIONS,
   CancelledError,
   HIDEABLE_REGIONS,
@@ -16,29 +14,24 @@ import {
   type ProcessResponse,
   redactField,
   type RedactStyle,
-  regionCounts,
   validateImageFile,
 } from "@/lib/process-client";
-import { textChanges, type TextChange } from "@/lib/text-diff";
+import { SAMPLES, type SampleId, loadSample, sampleThumbUrl } from "@/lib/samples";
 
-import { DocumentData } from "./document-data";
-import { ShareSafe } from "./share-safe";
+import { DataTab } from "./results/data-tab";
+import { type RegionId, REGION_LABELS, regionLabel, swatchFor } from "./results/labels";
+import { Overview } from "./results/overview";
+import { ResultTabs } from "./results/result-tabs";
+import { ShareTab } from "./results/share-tab";
+import { TextTab } from "./results/text-tab";
 
 type Status = "idle" | "loading" | "done" | "error";
-type RegionId = (typeof REGION_CONCEPTS)[number];
-
-const REGION_LABELS: Record<RegionId, { label: string; swatch: string }> = {
-  stamp: { label: "Stamp", swatch: "#dc2626" },
-  signature: { label: "Signature", swatch: "#2563eb" },
-  photograph: { label: "Photograph", swatch: "#ea580c" },
-  rectangle: { label: "Rectangle", swatch: "#16a34a" },
-};
 
 const STEPS = [
-  "Choose a JPEG or PNG up to 10 MB. A page photo, a chat, or a phone screenshot all work.",
+  "Choose a JPEG or PNG up to 10 MB, or try one of the samples. A page photo, a chat, or a phone screenshot all work.",
   "Leave on the regions you want marked and choose what the share-safe copy hides. Then press Clean screenshot. It can take up to a minute.",
-  "Compare the original with the overlay. Each kind of region has its own color.",
-  "Drag the slider to check the share-safe copy, then download it. Copy the cleaned or the shareable text.",
+  "Drag the slider to compare the original with the overlay. Point at a region to outline it.",
+  "Use the tabs for the text, the document data, and the share-safe copy to download or copy.",
 ] as const;
 
 const ALL_REGIONS: Record<RegionId, boolean> = {
@@ -74,21 +67,15 @@ function choicesKey(choices: Choices): string {
   ].join("|");
 }
 
-function regionLabel(label: string): string {
-  const known = REGION_LABELS[label as RegionId];
-  if (known) {
-    return known.label;
-  }
-  const words = label.replace(/^qr\b/, "QR");
-  return words.charAt(0).toUpperCase() + words.slice(1);
-}
 
 export function Cleaner({ apiBase }: { apiBase: string }) {
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [loadingSample, setLoadingSample] = useState<SampleId | null>(null);
+  const [runs, setRuns] = useState(0);
+  const [appliedExtract, setAppliedExtract] = useState(false);
   const [result, setResult] = useState<ProcessResponse | null>(null);
   const [dragging, setDragging] = useState(false);
   const [regions, setRegions] = useState<Record<RegionId, boolean>>(ALL_REGIONS);
@@ -128,7 +115,6 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
 
   function chooseFile(next: File | null) {
     setResult(null);
-    setNotice(null);
     setAppliedConcepts(null);
     setAppliedKey(null);
     if (!next) {
@@ -186,14 +172,19 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
     setCustomError(null);
   }
 
-  function swatchFor(label: string): string {
-    const known = REGION_LABELS[label as RegionId];
-    if (known) {
-      return known.swatch;
+  async function chooseSample(id: SampleId) {
+    if (status === "loading") {
+      return;
     }
-    const fromApi = result?.palette[label];
-    const index = custom.indexOf(label);
-    return fromApi ?? CUSTOM_PALETTE[Math.max(0, index) % CUSTOM_PALETTE.length];
+    setLoadingSample(id);
+    try {
+      chooseFile(await loadSample(id));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not load the sample.");
+      setStatus("error");
+    } finally {
+      setLoadingSample(null);
+    }
   }
 
   async function runClean() {
@@ -205,7 +196,6 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
     inFlight.current = controller;
     setStatus("loading");
     setError(null);
-    setNotice(null);
     setResult(null);
     try {
       const processed = await processImage(file, apiBase, {
@@ -220,6 +210,8 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
       setResult(processed);
       setAppliedConcepts([conceptsField(sent.concepts), ...sent.custom].filter(Boolean).join(","));
       setAppliedKey(choicesKey(sent));
+      setAppliedExtract(sent.extract);
+      setRuns((count) => count + 1);
       setStatus("done");
     } catch (caught) {
       if (caught instanceof CancelledError) {
@@ -243,54 +235,8 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
     void runClean();
   }
 
-  const cleaned = result?.cleaned_text ?? "";
-  const hasText = cleaned.trim().length > 0;
-
-  async function copyText() {
-    if (!hasText) {
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(cleaned);
-      setNotice("Copied");
-      setError(null);
-    } catch {
-      setNotice(null);
-      setError("Could not copy the text. Select it and copy it manually.");
-    }
-  }
-
-  function downloadText() {
-    if (!hasText || !file) {
-      return;
-    }
-    const blob = new Blob([markdownForCleanedText(cleaned)], {
-      type: "text/markdown;charset=utf-8",
-    });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = cleanedMarkdownName(file.name);
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
-  }
-
-  function downloadOverlay() {
-    if (!result || !file) {
-      return;
-    }
-    const anchor = document.createElement("a");
-    anchor.href = `data:image/png;base64,${result.overlay_png_base64}`;
-    anchor.download = overlayPngName(file.name);
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-  }
-
   const applied = appliedConcepts ? appliedConcepts.split(",").filter(Boolean) : [];
-  const counts = result ? regionCounts(result.boxes, applied) : [];
+  const appliedCustom = applied.filter((label) => !REGION_LABELS[label as RegionId]);
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-5 py-8 sm:px-8 sm:py-12">
@@ -298,7 +244,9 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
         <p className="text-[11px] font-medium tracking-[0.22em] text-muted uppercase">
           Document screenshot cleaner
         </p>
-        <p className="text-xs text-muted">Built with SAM 3.1 and Muse</p>
+        <p className="text-xs text-muted">
+          SAM 3.1 finds the regions. Muse reads the page, fixes the text, and pulls out the data.
+        </p>
       </header>
 
       <div className="mt-10 grid items-end gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
@@ -307,8 +255,9 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
             A messy page, read cleanly.
           </h1>
           <p className="max-w-md text-[15px] leading-relaxed text-muted">
-            Upload one JPEG or PNG. Choose which regions SAM 3.1 marks. Muse transcribes the
-            page, proofreads the text, and the page shows what changed.
+            Upload one JPEG or PNG. SAM 3.1 marks signatures, photos, stamps, or anything you
+            name. Muse transcribes and proofreads the page and pulls out its key fields. One click
+            gives you a copy that is safe to share.
           </p>
         </div>
 
@@ -363,6 +312,35 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
           />
         </label>
 
+        <div className="flex flex-col gap-2">
+          <p className="text-sm text-muted" id="samples-label">
+            No file to hand? Try a sample.
+          </p>
+          <ul aria-labelledby="samples-label" className="flex flex-wrap gap-2">
+            {SAMPLES.map((sample) => (
+              <li key={sample.id}>
+                <button
+                  type="button"
+                  onClick={() => void chooseSample(sample.id)}
+                  disabled={status === "loading" || loadingSample !== null}
+                  aria-pressed={file?.name === `${sample.id}.jpg`}
+                  className="flex items-center gap-2 rounded-2xl border border-line bg-paper py-1.5 pr-3 pl-1.5 text-left text-sm aria-pressed:border-stamp disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={sampleThumbUrl(sample.id)}
+                    alt=""
+                    width={40}
+                    height={40}
+                    className="h-10 w-10 rounded-lg bg-background object-cover"
+                  />
+                  {loadingSample === sample.id ? "Loading…" : sample.label}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+
         <fieldset disabled={status === "loading"} className="flex flex-col gap-3">
           <legend className="text-sm font-medium">Regions to mark</legend>
           <div className="flex flex-wrap gap-2">
@@ -393,7 +371,7 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
               >
                 <span
                   className="inline-block h-2.5 w-2.5 rounded-full"
-                  style={{ backgroundColor: swatchFor(name) }}
+                  style={{ backgroundColor: swatchFor(name, undefined, custom) }}
                   aria-hidden="true"
                 />
                 {regionLabel(name)}
@@ -593,204 +571,59 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
               ))}
             </ul>
           ) : null}
-          <div className="grid items-start gap-4 md:grid-cols-2">
-            <figure className="flex flex-col gap-3 rounded-3xl border border-line bg-paper p-4">
-              <figcaption className="flex min-h-7 items-center text-[11px] font-medium tracking-[0.18em] text-muted uppercase">
-                Original
-              </figcaption>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={previewUrl}
-                alt="Original upload"
-                className="max-h-[32rem] w-full rounded-2xl bg-background object-contain"
-              />
-            </figure>
-            <figure className="flex flex-col gap-3 rounded-3xl border border-line bg-paper p-4">
-              <figcaption className="flex min-h-7 items-center justify-between gap-3">
-                <span className="text-[11px] font-medium tracking-[0.18em] text-muted uppercase">
-                  SAM overlay
-                </span>
-                <button
-                  type="button"
-                  onClick={downloadOverlay}
-                  className="rounded-full border border-line px-3 py-1 text-xs"
-                >
-                  Download PNG
-                </button>
-              </figcaption>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={`data:image/png;base64,${result.overlay_png_base64}`}
-                alt="Upload with SAM masks"
-                className="max-h-[32rem] w-full rounded-2xl bg-background object-contain"
-              />
-            </figure>
-          </div>
-          {counts.length > 0 ? (
-            <ul className="flex flex-wrap gap-2" aria-label="Regions found">
-              {counts.map(({ label, count, bestScore }) => {
-                return (
-                  <li
-                    key={label}
-                    className="flex items-center gap-2 rounded-full border border-line bg-paper px-3 py-1 text-sm text-muted"
-                  >
-                    <span
-                      className="inline-block h-2.5 w-2.5 rounded-full"
-                      style={{ backgroundColor: swatchFor(label) }}
-                      aria-hidden="true"
-                    />
-                    <span className="text-foreground">{regionLabel(label)}</span>
-                    <span>
-                      {count === 0 ? "none found" : `${count} found`}
-                      {bestScore !== null ? ` · best ${Math.round(bestScore * 100)}%` : ""}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <p className="text-sm text-muted">No regions were requested, so the overlay has no masks.</p>
-          )}
-          {file ? (
-            <ShareSafe result={result} fileName={file.name} originalUrl={previewUrl} />
-          ) : null}
-          {file ? <DocumentData result={result} fileName={file.name} /> : null}
-          <Reading result={result} file={file} notice={notice} onCopy={copyText} onDownload={downloadText} />
-          {result.models ? (
-            <p className="text-xs text-muted">
-              Segmented with {result.models.segmentation}. Transcribed with{" "}
-              {result.models.transcription}. Proofread with {result.models.proofread}.
-              {result.models.signatures
-                ? ` Signatures located with ${result.models.signatures}.`
-                : ""}
-            </p>
-          ) : null}
+          <ResultTabs
+            key={runs}
+            label="Result"
+            tabs={[
+              {
+                id: "overview",
+                label: "Overview",
+                panel: (
+                  <Overview
+                    result={result}
+                    fileName={file?.name ?? "screenshot"}
+                    originalUrl={previewUrl}
+                    labels={applied}
+                    custom={appliedCustom}
+                  />
+                ),
+              },
+              {
+                id: "text",
+                label: "Text",
+                panel: <TextTab result={result} fileName={file?.name ?? "screenshot"} />,
+              },
+              {
+                id: "data",
+                label: "Data",
+                panel: (
+                  <DataTab
+                    result={result}
+                    fileName={file?.name ?? "screenshot"}
+                    requested={appliedExtract}
+                  />
+                ),
+              },
+              {
+                id: "share",
+                label: "Share-safe",
+                panel: (
+                  <ShareTab
+                    result={result}
+                    fileName={file?.name ?? "screenshot"}
+                    originalUrl={previewUrl}
+                  />
+                ),
+              },
+            ]}
+          />
         </section>
       ) : null}
 
       <footer className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-line pt-16 text-xs text-muted">
-        <p>JPEG or PNG, up to 10 MB, one image at a time.</p>
+        <p>JPEG or PNG, up to 10 MB, one image at a time. Nothing you upload is stored.</p>
         <p>SAM 3.1 marks the regions. Muse reads the words.</p>
       </footer>
     </main>
   );
-}
-
-function Reading({
-  result,
-  file,
-  notice,
-  onCopy,
-  onDownload,
-}: {
-  result: ProcessResponse;
-  file: File | null;
-  notice: string | null;
-  onCopy: () => void;
-  onDownload: () => void;
-}) {
-  const cleaned = result.cleaned_text;
-  const hasText = cleaned.trim().length > 0;
-  const unchanged = result.original_text === result.cleaned_text;
-  const changes = unchanged ? [] : textChanges(result.original_text, result.cleaned_text);
-
-  return (
-    <div className="flex flex-col gap-4 rounded-3xl border border-line bg-paper p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="font-display text-2xl font-normal">Cleaned text</h2>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={onCopy}
-            disabled={!hasText}
-            className="rounded-full border border-line px-4 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Copy cleaned text
-          </button>
-          <button
-            type="button"
-            onClick={onDownload}
-            disabled={!hasText || !file}
-            className="rounded-full border border-line px-4 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Download Markdown
-          </button>
-          {notice ? (
-            <span role="status" className="text-sm text-muted">
-              {notice}
-            </span>
-          ) : null}
-        </div>
-      </div>
-      {unchanged ? (
-        <div className="flex flex-col gap-3">
-          {hasText ? <p className="text-sm text-muted">No wording changes.</p> : null}
-          <pre className="min-h-28 overflow-auto rounded-2xl border border-line bg-background p-4 font-mono text-sm leading-relaxed whitespace-pre-wrap">
-            {hasText ? cleaned : "No text was found in this image."}
-          </pre>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          <p className="text-sm text-muted">
-            Struck-through words were in the transcription. Underlined words are the proofread
-            wording.
-          </p>
-          <div className="grid items-start gap-4 md:grid-cols-2">
-            <div className="flex flex-col gap-2">
-              <h3 className="text-[11px] font-medium tracking-[0.18em] text-muted uppercase">
-                Transcription
-              </h3>
-              <pre className="min-h-28 overflow-auto rounded-2xl border border-line bg-background p-4 font-mono text-sm leading-relaxed whitespace-pre-wrap">
-                <ChangeSpans changes={changes} show={TRANSCRIPTION} />
-              </pre>
-            </div>
-            <div className="flex flex-col gap-2">
-              <h3 className="text-[11px] font-medium tracking-[0.18em] text-muted uppercase">
-                Proofread
-              </h3>
-              <pre className="min-h-28 overflow-auto rounded-2xl border border-line bg-background p-4 font-mono text-sm leading-relaxed whitespace-pre-wrap">
-                {hasText ? (
-                  <ChangeSpans changes={changes} show={PROOFREAD} />
-                ) : (
-                  "No text was found in this image."
-                )}
-              </pre>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-const TRANSCRIPTION = new Set<TextChange["type"]>(["same", "removed"]);
-const PROOFREAD = new Set<TextChange["type"]>(["same", "added"]);
-
-function ChangeSpans({
-  changes,
-  show,
-}: {
-  changes: TextChange[];
-  show: ReadonlySet<TextChange["type"]>;
-}) {
-  return changes.map((change, index) => {
-    if (!show.has(change.type)) {
-      return null;
-    }
-    if (change.type === "removed") {
-      return (
-        <del key={index} className="line-through decoration-stamp decoration-2">
-          {change.text}
-        </del>
-      );
-    }
-    if (change.type === "added") {
-      return (
-        <ins key={index} className="underline decoration-foreground decoration-2 underline-offset-2">
-          {change.text}
-        </ins>
-      );
-    }
-    return <span key={index}>{change.text}</span>;
-  });
 }

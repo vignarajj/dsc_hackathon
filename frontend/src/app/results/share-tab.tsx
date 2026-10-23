@@ -5,7 +5,10 @@ import { useState } from "react";
 import { categoryLabel, safePngName } from "@/lib/cleaned-text";
 import type { ProcessResponse } from "@/lib/process-client";
 
-export function ShareSafe({
+import { CompareSlider } from "./compare-slider";
+import { EmptyTab } from "./empty-tab";
+
+export function ShareTab({
   result,
   fileName,
   originalUrl,
@@ -20,7 +23,12 @@ export function ShareSafe({
     : null;
   const shareable = result.shareable_text;
   if (!redactedUrl && shareable === null) {
-    return null;
+    return (
+      <EmptyTab title="Share-safe copy">
+        Nothing was hidden in this run. Tick the regions to hide, or the option to hide personal
+        details in the text, then clean again.
+      </EmptyTab>
+    );
   }
 
   async function copyShareable() {
@@ -65,7 +73,14 @@ export function ShareSafe({
 
       {redactedUrl ? (
         <div className="flex flex-col gap-3">
-          <CompareSlider beforeUrl={originalUrl} afterUrl={redactedUrl} />
+          <CompareSlider
+            beforeUrl={originalUrl}
+            afterUrl={redactedUrl}
+            beforeLabel="Original"
+            afterLabel="Share-safe"
+            afterAlt="Share-safe copy"
+            name="Compare the original with the share-safe copy"
+          />
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
@@ -121,53 +136,5 @@ export function ShareSafe({
         </div>
       ) : null}
     </section>
-  );
-}
-
-/** Original on the left of the handle, share-safe copy on the right. */
-function CompareSlider({ beforeUrl, afterUrl }: { beforeUrl: string; afterUrl: string }) {
-  const [split, setSplit] = useState(50);
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex justify-center rounded-2xl bg-background">
-        {/* The frame hugs the picture, so the handle position maps onto it. */}
-        <div className="relative max-w-full overflow-hidden">
-          {/* Both are data or object URLs, so the image optimizer cannot fetch them. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={afterUrl}
-            alt="Share-safe copy"
-            className="block h-auto max-h-[36rem] w-auto max-w-full"
-          />
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={beforeUrl}
-            alt=""
-            aria-hidden="true"
-            className="absolute inset-0 h-full w-full"
-            style={{ clipPath: `inset(0 ${100 - split}% 0 0)` }}
-          />
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-y-0 w-0.5 -translate-x-1/2 bg-stamp"
-            style={{ left: `${split}%` }}
-          />
-        </div>
-      </div>
-      <label className="flex items-center gap-3 text-sm text-muted">
-        <span className="shrink-0">Original</span>
-        <input
-          type="range"
-          min={0}
-          max={100}
-          value={split}
-          onChange={(event) => setSplit(Number(event.target.value))}
-          aria-label="Compare the original with the share-safe copy"
-          aria-valuetext={`${split}% original`}
-          className="w-full accent-stamp"
-        />
-        <span className="shrink-0">Share-safe</span>
-      </label>
-    </div>
   );
 }
