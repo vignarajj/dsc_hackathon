@@ -45,6 +45,7 @@ class ProcessResponse(BaseModel):
     redacted_png_base64: str | None
     sensitive: list[SpanModel]
     shareable_text: str | None
+    image_text_hidden: bool
     warnings: list[str]
 
 

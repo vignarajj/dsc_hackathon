@@ -121,6 +121,8 @@ Optional values in `backend/.env`:
 | `MUSE_VISION_MODEL` | `muse-spark-1.3` |
 | `MUSE_TEXT_MODEL` | `muse-spark-1.3` |
 | `MUSE_SIGNATURE_MODEL` | `muse-spark-1.3` (boxes signatures, which SAM does not find) |
+| `REDACT_IMAGE_TEXT` | `false`. `true` also blacks out sensitive text inside the share-safe image. |
+| `MUSE_TEXT_BOX_MODEL` | `muse-wonder-1.0` (finds that text in the picture) |
 | `SAM_CONCEPTS` | `stamp,signature,photograph,rectangle` (used when the request omits `concepts`) |
 | `CORS_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` |
 | `UPSTREAM_TIMEOUT_SECONDS` | `60` |

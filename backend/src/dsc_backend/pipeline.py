@@ -35,6 +35,7 @@ class ProcessResult:
     redacted_png_base64: str | None = None
     sensitive: list[Span] = field(default_factory=list)
     shareable_text: str | None = None
+    image_text_hidden: bool = False
     warnings: list[str] = field(default_factory=list)
 
 
@@ -173,9 +174,22 @@ async def process_image(
             original_text, cleaned_text, model_task.result() if model_task else [], warnings
         )
 
+    text_boxes: list[tuple[int, int, int, int]] | None = None
+    if hide.text and settings.redact_image_text and sensitive:
+        text_boxes = await _locate_text(gateway, prepared.data_url, width, height, sensitive)
+        if text_boxes is None:
+            warnings.append("Text in the picture could not be located, so it is not hidden.")
+        elif len(text_boxes) < len(_lines(sensitive)):
+            warnings.append(
+                "Some sensitive text was not found in the picture, so it is not hidden there."
+            )
+
     redacted: bytes | None = None
-    if hide.labels:
-        redacted, hidden = render_redacted(prepared.image, regions, hide.labels, hide.style)
+    if hide.labels or text_boxes is not None:
+        boxes_found = [box for found in (text_boxes or {}).values() for box in found]
+        redacted, hidden = render_redacted(
+            prepared.image, regions, hide.labels, hide.style, boxes_found
+        )
         for label in hide.labels:
             if label == "signature" and signatures_failed:
                 continue
@@ -200,14 +214,37 @@ async def process_image(
             "transcription": settings.muse_vision_model,
             "proofread": settings.muse_text_model,
             "signatures": settings.muse_signature_model,
+            **({"text_boxes": settings.muse_text_box_model} if settings.redact_image_text else {}),
         },
         redacted_png_base64=(
             base64.b64encode(redacted).decode("ascii") if redacted is not None else None
         ),
         sensitive=sensitive,
         shareable_text=shareable_text,
+        image_text_hidden=text_boxes is not None,
         warnings=warnings,
     )
+
+
+def _lines(spans: list[Span]) -> list[str]:
+    """Each distinct line of span text. A word box covers one line at most."""
+    lines: list[str] = []
+    for span in spans:
+        for line in span.text.splitlines():
+            line = line.strip()
+            if line and line not in lines:
+                lines.append(line)
+    return lines
+
+
+async def _locate_text(
+    gateway: MetaGateway,
+    data_url: str,
+    width: int,
+    height: int,
+    spans: list[Span],
+) -> dict[str, list[tuple[int, int, int, int]]] | None:
+    return await _optional(gateway.text_boxes(data_url, width, height, _lines(spans)))
 
 
 def _mask_sensitive(
