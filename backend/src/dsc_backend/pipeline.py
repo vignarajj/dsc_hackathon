@@ -8,6 +8,7 @@ from dsc_backend.config import DEFAULT_CONCEPTS, Settings
 from dsc_backend.errors import PipelineError
 from dsc_backend.imaging import prepare_image, render_overlay
 from dsc_backend.meta import MetaGateway
+from dsc_backend.privacy import Span, mask_text, merge_spans, occurs, pattern_spans, surnames
 from dsc_backend.redaction import REDACT_STYLES, render_redacted
 from dsc_backend.regions import Region, clamp_box
 
@@ -32,6 +33,8 @@ class ProcessResult:
     cleaned_text: str
     models: dict[str, str]
     redacted_png_base64: str | None = None
+    sensitive: list[Span] = field(default_factory=list)
+    shareable_text: str | None = None
     warnings: list[str] = field(default_factory=list)
 
 
@@ -39,6 +42,11 @@ class ProcessResult:
 class Redaction:
     labels: tuple[str, ...] = ()
     style: str = "black"
+    text: bool = False
+
+
+_TRUE = {"true", "1", "yes", "on"}
+_FALSE = {"false", "0", "no", "off", ""}
 
 
 def concepts_for_request(raw: str | None, default: tuple[str, ...]) -> tuple[str, ...]:
@@ -68,6 +76,7 @@ def redaction_for_request(
     raw_labels: str | None,
     raw_style: str | None,
     concepts: tuple[str, ...],
+    raw_text: str | None = None,
 ) -> Redaction:
     """Read which marked regions to hide, and how.
 
@@ -84,7 +93,10 @@ def redaction_for_request(
     style = (raw_style or "black").strip().lower()
     if style not in REDACT_STYLES:
         raise PipelineError(400, "Hidden regions can be black or blur.")
-    return Redaction(labels=labels, style=style)
+    flag = (raw_text or "").strip().lower()
+    if flag not in _TRUE | _FALSE:
+        raise PipelineError(400, "redact_text must be true or false.")
+    return Redaction(labels=labels, style=style, text=flag in _TRUE)
 
 
 async def process_image(
@@ -143,8 +155,23 @@ async def process_image(
             regions.append(region)
             boxes.append(Box(x=x, y=y, w=w, h=h, label=region.label, score=region.score))
     original_text = transcript_task.result().strip()
-    cleaned_text = await _proofread(gateway, original_text)
+    model_task = None
+    try:
+        async with asyncio.TaskGroup() as group:
+            proofread_task = group.create_task(_proofread(gateway, original_text))
+            if hide.text and original_text:
+                model_task = group.create_task(_optional(gateway.sensitive_spans(original_text)))
+    except ExceptionGroup as group:
+        raise _from_group(group) from group
+    cleaned_text = proofread_task.result()
     overlay = render_overlay(prepared.image, regions)
+
+    sensitive: list[Span] = []
+    shareable_text: str | None = None
+    if hide.text:
+        sensitive, shareable_text = _mask_sensitive(
+            original_text, cleaned_text, model_task.result() if model_task else [], warnings
+        )
 
     redacted: bytes | None = None
     if hide.labels:
@@ -177,8 +204,41 @@ async def process_image(
         redacted_png_base64=(
             base64.b64encode(redacted).decode("ascii") if redacted is not None else None
         ),
+        sensitive=sensitive,
+        shareable_text=shareable_text,
         warnings=warnings,
     )
+
+
+def _mask_sensitive(
+    original_text: str,
+    cleaned_text: str,
+    model: list[Span] | None,
+    warnings: list[str],
+) -> tuple[list[Span], str]:
+    """Combine Muse and pattern spans, then mask them in the proofread text.
+
+    Spans come from the transcript, because Muse reads it while the proofread
+    runs. A span the proofread reworded cannot be masked, and the page is told.
+    """
+    if model is None:
+        warnings.append(
+            "Muse could not check the text for personal details, so only phone numbers, "
+            "emails, and account numbers are masked."
+        )
+    from_transcript = pattern_spans(original_text)
+    known = {span.text for span in from_transcript}
+    patterns = from_transcript + [
+        span for span in pattern_spans(cleaned_text) if span.text not in known
+    ]
+    spans = merge_spans(model or [], patterns)
+    spans += surnames(spans, cleaned_text)
+    if any(not occurs(cleaned_text, span.text) for span in spans):
+        warnings.append(
+            "Some sensitive text could not be matched after proofreading. "
+            "Check the shareable text before you send it."
+        )
+    return spans, mask_text(cleaned_text, spans)
 
 
 async def _optional[T](call: Awaitable[T]) -> T | None:

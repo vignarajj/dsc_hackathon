@@ -21,6 +21,8 @@ The process refuses to start when `META_API_KEY` is missing.
 - Optional multipart field `redact`, a comma-separated list of marked regions to hide
   in a share-safe copy. Omit it for no copy.
 - Optional multipart field `redact_style`: `black` (default) or `blur`.
+- Optional multipart field `redact_text`: `true` to find personal details in the text and
+  return a masked copy. Default `false`.
 
 ```bash
 curl -s -F "image=@note.png;type=image/png" http://127.0.0.1:8000/api/process
@@ -43,6 +45,11 @@ curl -s -F "image=@form.jpg;type=image/jpeg" -F "redact=signature,photograph" ht
     "signatures": "muse-spark-1.3"
   },
   "redacted_png_base64": "<png with the chosen regions hidden, or null>",
+  "sensitive": [
+    { "category": "phone", "text": "07911 123456", "source": "pattern" },
+    { "category": "name", "text": "Marco Bellini", "source": "model" }
+  ],
+  "shareable_text": "His name is [NAME], call [PHONE].",
   "warnings": ["No photograph was found, so none is hidden."]
 }
 ```
@@ -108,6 +115,29 @@ can leave shapes readable, so black is the safer choice. The copy is
 re-encoded as PNG from raw pixels, so no EXIF, GPS, or other metadata from the
 upload survives. A requested region that is not found adds a warning, and the
 copy is still returned.
+
+## Sensitive text
+
+With `redact_text=true`, Muse reads the transcript for personal details while
+the proofread runs. It uses a strict JSON schema and the same `<transcript>`
+fence as the proofread. Categories are `phone`, `email`, `id_number`,
+`account_number`, `card_number`, `address`, `date_of_birth`, and `name`. A
+span is kept only when its category is one of these and its text occurs
+verbatim, as whole words, in the transcript, so an invented value is never
+shown or masked.
+
+Fixed patterns back the model up: emails, phone numbers with 9 to 15 digits,
+card numbers that pass the Luhn check, IBANs, runs of 8 or more digits, dates
+after "DOB" or "date of birth", and sort codes after "sort code". A long
+number such as a barcode may be masked as an account number. When Muse names
+someone in full, their surname is masked wherever it also appears alone.
+
+`shareable_text` is the proofread text with every span replaced by
+`[CATEGORY]`, longest first. If a span cannot be found in the proofread
+because the proofread changed it, a warning says to check the text. If the
+Muse call fails, the patterns still run and a warning says so. Text inside
+the picture is not hidden by this step. `sensitive` is `[]` and
+`shareable_text` is `null` unless `redact_text` is `true`.
 
 CORS allows `http://localhost:3000` and `http://127.0.0.1:3000` only.
 
