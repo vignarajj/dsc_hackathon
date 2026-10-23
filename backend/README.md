@@ -27,6 +27,8 @@ The process refuses to start when `META_API_KEY` is missing.
   return a masked copy. Default `false`.
 - Optional multipart field `extract`: `true` to return the document type, a summary, and key
   fields. Default `false`.
+- Optional multipart field `describe`: `true` to add a short Muse description to each region.
+  Default `false`.
 
 ```bash
 curl -s -F "image=@note.png;type=image/png" http://127.0.0.1:8000/api/process
@@ -38,7 +40,12 @@ curl -s -F "image=@form.jpg;type=image/jpeg" -F "redact=signature,photograph" ht
 
 ```json
 {
-  "boxes": [{ "x": 0, "y": 0, "w": 100, "h": 50, "label": "stamp", "score": 0.97 }],
+  "boxes": [
+    {
+      "x": 0, "y": 0, "w": 100, "h": 50, "label": "stamp", "score": 0.97,
+      "description": "Round red stamp reading \"PAID\""
+    }
+  ],
   "overlay_png_base64": "<png with masks drawn over the working image>",
   "original_text": "<muse transcription>",
   "cleaned_text": "<muse proofread text>",
@@ -132,7 +139,7 @@ as one JSON object per line, then the result:
 ```
 
 The first line lists only the stages this request will run: `prepare`,
-`segment` (when regions are marked), `transcribe`, `proofread`, `extract`
+`segment` (when regions are marked), `describe` (with `describe=true`), `transcribe`, `proofread`, `extract`
 (with `extract=true`), `privacy` (with `redact_text=true`), and `render`. Each
 stage then sends `running` and `done`; `segment` and `transcribe` run at the
 same time, as do `proofread`, `extract`, and `privacy`. The last line is either
@@ -150,6 +157,24 @@ header the endpoint answers exactly as before.
 ```bash
 curl -sN -H "accept: application/x-ndjson" -F "image=@note.png;type=image/png" http://127.0.0.1:8000/api/process
 ```
+
+## Region descriptions
+
+With `describe=true`, each region gets a short note from Muse vision
+(`MUSE_VISION_MODEL`), such as `Round red stamp reading "PAID"`. The work starts
+as soon as SAM is done, while the transcription may still be running. Each box
+is cropped from the working image with an 8% margin on every side, and a crop
+with a short side under 256 px is enlarged to 256 px, with its long side kept
+to 1536 px at most. The prompt asks for 12 words at most, quotes any text in
+the crop, and tells the model never to name or guess who a person is. The
+reply is cut to one line of 160 characters at most.
+
+At most 8 regions are described, best SAM score first and unscored boxes
+(such as Muse signature boxes) last, with 4 calls in flight at once. A failed
+call leaves that box's `description` as `null` and never fails the request.
+`description` is `null` on every box when `describe` is not `true`. In the
+stream, this is the `describe` stage, and its detail says how many were
+described.
 
 ## Custom regions
 

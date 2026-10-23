@@ -101,6 +101,9 @@ class FakeGateway:
             }
         )
 
+    async def describe_region(self, data_url: str) -> str:
+        return f"A {_size(data_url)[0]} px wide region with a mark"
+
     async def aclose(self) -> None:
         return None
 

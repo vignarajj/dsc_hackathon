@@ -121,6 +121,19 @@ test("tabs follow the arrow, Home, and End keys", async ({ page }) => {
   await expect(page.getByRole("tabpanel", { name: "Share-safe" })).toBeVisible();
 });
 
+test("region notes outline one box with its note", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: /Signed form with a photo/ }).click();
+  await page.getByRole("checkbox", { name: /Describe each region/ }).check();
+  await page.getByRole("button", { name: "Clean screenshot" }).click();
+  const panel = page.getByRole("tabpanel", { name: "Overview" });
+  const notes = panel.getByRole("list", { name: "Region notes" });
+  await expect(notes.getByRole("button")).toHaveCount(3);
+  await notes.getByRole("button", { name: /^Stamp/ }).hover();
+  await expect(panel.getByTestId("highlight")).toHaveCount(1);
+  await expect(panel.getByTestId("highlight")).toContainText("px wide region with a mark");
+});
+
 test("focusing a region chip outlines its boxes", async ({ page }) => {
   await cleanSample(page);
   const panel = page.getByRole("tabpanel", { name: "Overview" });

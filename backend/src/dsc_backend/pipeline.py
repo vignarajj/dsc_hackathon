@@ -2,9 +2,10 @@ import asyncio
 import base64
 import logging
 from collections.abc import Awaitable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from dsc_backend.config import Settings
+from dsc_backend.describe import describe_regions
 from dsc_backend.errors import PipelineError
 from dsc_backend.extraction import Document, InvalidDocument, parse_document
 from dsc_backend.form import Redaction
@@ -32,6 +33,7 @@ class Box:
     h: int
     label: str
     score: float | None
+    description: str | None = None
 
 
 @dataclass(frozen=True)
@@ -58,6 +60,7 @@ async def process_image(
     redaction: Redaction | None = None,
     extract: bool = False,
     emit: Emit | None = None,
+    describe: bool = False,
 ) -> ProcessResult:
     """Run every step on an image already checked by prepare_image.
 
@@ -71,6 +74,7 @@ async def process_image(
     await progress.plan(
         ["prepare"]
         + (["segment"] if selected else [])
+        + (["describe"] if selected and describe else [])
         + ["transcribe", "proofread"]
         + (["extract"] if extract else [])
         + (["privacy"] if hide.text else [])
@@ -79,6 +83,7 @@ async def process_image(
     await progress.done("prepare", f"{width}x{height}")
 
     segment_task = None
+    describe_task = None
     try:
         async with asyncio.TaskGroup() as group:
             if selected:
@@ -87,6 +92,15 @@ async def process_image(
                         "segment",
                         _segment(gateway, prepared.data_url, selected, width, height),
                         lambda found: _region_summary(selected, found[0]),
+                    )
+                )
+            if segment_task is not None and describe:
+                # Starts as soon as SAM is done, while the transcription may still run.
+                describe_task = group.create_task(
+                    progress.run(
+                        "describe",
+                        _describe_after(segment_task, gateway, prepared, width, height),
+                        _described_summary,
                     )
                 )
             transcript_task = group.create_task(
@@ -105,17 +119,12 @@ async def process_image(
             "Signatures could not be located, so none are "
             + ("marked or hidden." if "signature" in hide.labels else "marked.")
         )
-    regions: list[Region] = []
-    boxes: list[Box] = []
-    for found_regions in found_by_concept:
-        for region in found_regions:
-            # Report the part of the box on the working image; drop boxes off it.
-            clamped = clamp_box(region.x, region.y, region.w, region.h, width, height)
-            if clamped is None:
-                continue
-            x, y, w, h = clamped
-            regions.append(region)
-            boxes.append(Box(x=x, y=y, w=w, h=h, label=region.label, score=region.score))
+    kept = _on_image(found_by_concept, width, height)
+    regions = [region for region, _ in kept]
+    boxes = [box for _, box in kept]
+    if describe_task is not None:
+        notes = describe_task.result()
+        boxes = [replace(box, description=note) for box, note in zip(boxes, notes, strict=True)]
     original_text = transcript_task.result().strip()
 
     model_task = None
@@ -208,6 +217,37 @@ async def process_image(
         document=document,
         warnings=warnings,
     )
+
+
+def _on_image(
+    found_by_concept: list[list[Region]], width: int, height: int
+) -> list[tuple[Region, Box]]:
+    """Each region with its box clipped to the working image. Boxes off it are dropped."""
+    kept: list[tuple[Region, Box]] = []
+    for found_regions in found_by_concept:
+        for region in found_regions:
+            clamped = clamp_box(region.x, region.y, region.w, region.h, width, height)
+            if clamped is None:
+                continue
+            x, y, w, h = clamped
+            kept.append((region, Box(x=x, y=y, w=w, h=h, label=region.label, score=region.score)))
+    return kept
+
+
+async def _describe_after(
+    segment_task: asyncio.Task[tuple[list[list[Region]], bool]],
+    gateway: MetaGateway,
+    prepared: PreparedImage,
+    width: int,
+    height: int,
+) -> list[str | None]:
+    found_by_concept, _ = await segment_task
+    boxes = [box for _, box in _on_image(found_by_concept, width, height)]
+    return await describe_regions(prepared.image, boxes, gateway.describe_region)
+
+
+def _described_summary(notes: list[str | None]) -> str:
+    return f"{sum(note is not None for note in notes)} of {len(notes)} described"
 
 
 async def _segment(

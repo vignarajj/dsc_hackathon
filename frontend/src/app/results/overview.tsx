@@ -22,6 +22,17 @@ export function Overview({
   custom: readonly string[];
 }) {
   const [active, setActive] = useState<string | null>(null);
+  const [note, setNote] = useState<number | null>(null);
+  const described = result.boxes
+    .map((box, index) => ({ box, index }))
+    .filter(({ box }) => box.description !== null);
+  const highlight =
+    note !== null
+      ? [{ ...result.boxes[note], note: result.boxes[note].description }]
+      : active
+        ? result.boxes.filter((box) => box.label === active)
+        : [];
+  const highlightLabel = note !== null ? result.boxes[note].label : active;
   const counts = regionCounts(result.boxes, labels);
   const overlayUrl = `data:image/png;base64,${result.overlay_png_base64}`;
 
@@ -58,8 +69,10 @@ export function Overview({
         afterLabel="SAM overlay"
         afterAlt="Upload with SAM masks"
         name="Compare the original with the SAM overlay"
-        highlight={active ? result.boxes.filter((box) => box.label === active) : []}
-        highlightColor={active ? swatchFor(active, result.palette, custom) : undefined}
+        highlight={highlight}
+        highlightColor={
+          highlightLabel ? swatchFor(highlightLabel, result.palette, custom) : undefined
+        }
       />
       {counts.length > 0 ? (
         <>
@@ -94,6 +107,37 @@ export function Overview({
           <p className="text-xs text-muted">
             Point at or focus a region to outline it on the picture. Drag the slider to compare.
           </p>
+          {described.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              <h3 className="text-[11px] font-medium tracking-[0.18em] text-muted uppercase">
+                Region notes by Muse
+              </h3>
+              <ul className="flex flex-col gap-1" aria-label="Region notes">
+                {described.map(({ box, index }) => (
+                  <li key={index}>
+                    <button
+                      type="button"
+                      aria-pressed={note === index}
+                      onMouseEnter={() => setNote(index)}
+                      onMouseLeave={() => setNote(null)}
+                      onFocus={() => setNote(index)}
+                      onBlur={() => setNote(null)}
+                      onClick={() => setNote((current) => (current === index ? null : index))}
+                      className="flex w-full items-start gap-2 rounded-xl px-2 py-1.5 text-left text-sm hover:bg-background aria-pressed:bg-background"
+                    >
+                      <span
+                        className="mt-1.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: swatchFor(box.label, result.palette, custom) }}
+                        aria-hidden="true"
+                      />
+                      <span className="shrink-0 text-muted">{regionLabel(box.label)}</span>
+                      <span>{box.description}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </>
       ) : (
         <p className="text-sm text-muted">No regions were requested, so the overlay has no masks.</p>

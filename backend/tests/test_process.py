@@ -99,7 +99,9 @@ def test_process_returns_contract_fields() -> None:
     body = response.json()
     assert body["original_text"] == "Reciept total"
     assert body["cleaned_text"] == "Receipt total"
-    assert body["boxes"] == [{"x": 0, "y": 0, "w": 4, "h": 4, "label": "stamp", "score": 0.91}]
+    assert body["boxes"] == [
+        {"x": 0, "y": 0, "w": 4, "h": 4, "label": "stamp", "score": 0.91, "description": None}
+    ]
     overlay = base64.b64decode(body["overlay_png_base64"])
     assert overlay.startswith(b"\x89PNG")
     assert gateway.concepts == ["stamp", "signature", "photograph", "rectangle"]
@@ -256,7 +258,7 @@ def test_boxes_are_clipped_and_off_image_boxes_dropped() -> None:
         )
     assert response.status_code == 200
     assert response.json()["boxes"] == [
-        {"x": 6, "y": 6, "w": 2, "h": 2, "label": "stamp", "score": 0.8}
+        {"x": 6, "y": 6, "w": 2, "h": 2, "label": "stamp", "score": 0.8, "description": None}
     ]
 
 
@@ -297,6 +299,7 @@ def test_redacted_copy_hides_the_chosen_regions() -> None:
         "h": 4,
         "label": "signature",
         "score": None,
+        "description": None,
     }
 
 
@@ -602,3 +605,55 @@ def test_no_extraction_unless_asked_or_without_text() -> None:
     assert body["document"] is None
     assert body["warnings"] == []
     assert gateway.extract_calls == []
+
+
+class DescribeGateway(FakeGateway):
+    def __init__(self, fail: bool = False) -> None:
+        super().__init__()
+        self.fail = fail
+        self.described = 0
+
+    async def describe_region(self, data_url: str) -> str:
+        assert data_url.startswith("data:image/jpeg;base64,")
+        self.described += 1
+        if self.fail:
+            raise PipelineError(502, "The model request failed")
+        return "  Small square stamp  "
+
+
+def test_regions_get_descriptions_when_asked() -> None:
+    gateway = DescribeGateway()
+    with TestClient(create_app(_settings(), gateway)) as client:
+        body = _post(client, describe="true").json()
+        plain = _post(client).json()
+    assert gateway.described == 1
+    assert body["boxes"][0]["description"] == "Small square stamp"
+    assert plain["boxes"][0]["description"] is None
+    assert body["warnings"] == []
+
+
+def test_a_failed_description_leaves_the_box_and_the_request_alone() -> None:
+    gateway = DescribeGateway(fail=True)
+    with TestClient(create_app(_settings(), gateway)) as client:
+        response = _post(client, describe="true")
+    assert response.status_code == 200
+    assert response.json()["boxes"][0] == {
+        "x": 0,
+        "y": 0,
+        "w": 4,
+        "h": 4,
+        "label": "stamp",
+        "score": 0.91,
+        "description": None,
+    }
+
+
+def test_no_descriptions_without_regions_or_a_valid_flag() -> None:
+    gateway = DescribeGateway()
+    with TestClient(create_app(_settings(), gateway)) as client:
+        none_marked = _post(client, concepts=" , ", describe="true")
+        bad = _post(client, describe="often")
+    assert none_marked.status_code == 200
+    assert gateway.described == 0
+    assert bad.status_code == 400
+    assert bad.json()["detail"] == "describe must be true or false."

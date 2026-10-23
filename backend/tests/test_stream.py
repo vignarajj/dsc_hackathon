@@ -154,3 +154,15 @@ def test_other_accept_headers_get_json(accept: str) -> None:
     with TestClient(create_app(_settings(), FakeGateway())) as client:
         response = _post(client, {"accept": accept} if accept else None)
     assert response.json()["original_text"] == "Reciept total"
+
+
+def test_describe_stage_reports_how_many_were_described() -> None:
+    class Notes(FakeGateway):
+        async def describe_region(self, data_url: str) -> str:
+            return "Stamp"
+
+    with TestClient(create_app(_settings(), Notes())) as client:
+        events = _events(_post(client, STREAM, describe="true"))
+    assert events[0]["stages"][:3] == ["prepare", "segment", "describe"]  # type: ignore[index]
+    done = next(e for e in events if e.get("stage") == "describe" and e["status"] == "done")
+    assert done["detail"] == "1 of 1 described"
