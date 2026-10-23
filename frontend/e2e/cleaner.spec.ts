@@ -106,6 +106,24 @@ test("cancelling a streamed run returns the page to idle", async ({ page }) => {
   await expect(page.locator("p[role=alert]")).toHaveCount(0);
 });
 
+test("the document answers from its own text, with a quote", async ({ page }) => {
+  await cleanSample(page);
+  await page.getByRole("tab", { name: "Text" }).click();
+  const text = page.getByRole("tabpanel", { name: "Text" });
+  // The sample is a form, so the suggestions are the form ones.
+  await text.getByRole("button", { name: "Whose form is this?" }).click();
+  const answers = text.getByRole("list", { name: "Answers" });
+  await expect(answers.getByRole("listitem")).toHaveCount(1);
+  await expect(answers).toContainText("It is Daniel Okafor's form.");
+  await expect(answers).toContainText("From the page: “Daniel Okafor”");
+
+  await text.getByLabel("Question about the document").fill("What colour is the pen?");
+  await text.getByRole("button", { name: "Ask", exact: true }).click();
+  await expect(answers.getByRole("listitem")).toHaveCount(2);
+  await expect(answers.getByRole("listitem").first()).toContainText("The document does not say.");
+  await expect(answers.getByRole("listitem").first()).not.toContainText("From the page");
+});
+
 test("tabs follow the arrow, Home, and End keys", async ({ page }) => {
   await cleanSample(page);
   const overview = page.getByRole("tab", { name: "Overview" });

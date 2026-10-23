@@ -16,6 +16,7 @@ os.environ.setdefault("META_API_KEY", "fake-key-for-browser-tests")
 
 import uvicorn  # noqa: E402
 
+from dsc_backend.ask import NOT_IN_DOCUMENT, Question  # noqa: E402
 from dsc_backend.config import Settings  # noqa: E402
 from dsc_backend.main import create_app  # noqa: E402
 from dsc_backend.privacy import Span  # noqa: E402
@@ -103,6 +104,11 @@ class FakeGateway:
 
     async def describe_region(self, data_url: str) -> str:
         return f"A {_size(data_url)[0]} px wide region with a mark"
+
+    async def ask(self, question: Question) -> str:
+        if "whose" in question.question.lower():
+            return json.dumps({"answer": "It is Daniel Okafor's form.", "quote": "Daniel Okafor"})
+        return json.dumps({"answer": NOT_IN_DOCUMENT, "quote": ""})
 
     async def aclose(self) -> None:
         return None

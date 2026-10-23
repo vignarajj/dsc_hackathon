@@ -126,7 +126,7 @@ Optional values in `backend/.env`:
 | `SAM_CONCEPTS` | `stamp,signature,photograph,rectangle` (used when the request omits `concepts`) |
 | `CORS_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` |
 | `UPSTREAM_TIMEOUT_SECONDS` | `60` |
-| `RATE_LIMIT_PER_MINUTE` | `0` (off). Requests per minute per client IP for `/api/process`. Over the limit is HTTP 429. |
+| `RATE_LIMIT_PER_MINUTE` | `0` (off). Requests per minute per client IP for `/api/process` and `/api/ask` together. Over the limit is HTTP 429. |
 
 `MUSE_TEXT_MODEL` can be set to `muse-wonder-1.0` for the proofread step. The vision step stays on Muse Spark.
 

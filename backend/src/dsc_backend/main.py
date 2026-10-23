@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
+from dsc_backend.ask import NOT_IN_DOCUMENT, Answer, parse_answer, question_for_request
 from dsc_backend.config import Settings, load_settings
 from dsc_backend.errors import PipelineError
 from dsc_backend.form import (
@@ -68,6 +69,11 @@ class ProcessResponse(BaseModel):
     warnings: list[str]
 
 
+class AnswerModel(BaseModel):
+    answer: str
+    quote: str | None
+
+
 def create_app(
     settings: Settings | None = None,
     gateway: MetaGateway | None = None,
@@ -101,6 +107,28 @@ def create_app(
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.post("/api/ask", response_model=AnswerModel)
+    async def ask(request: Request) -> Answer:
+        """Answer a question from the document text the page already has. No image is sent."""
+        _check_rate(request)
+        try:
+            body = await request.json()
+        except ValueError as exc:
+            raise PipelineError(400, "Send the question as JSON.") from exc
+        if not isinstance(body, dict):
+            raise PipelineError(400, "Send the question as JSON.")
+        question = question_for_request(body.get("question"), body.get("text"), body.get("fields"))
+        if not question.text.strip():
+            return Answer(answer=NOT_IN_DOCUMENT, quote=None)
+        gateway_for_request: MetaGateway = request.app.state.gateway
+        try:
+            reply = await gateway_for_request.ask(question)
+        except PipelineError:
+            raise
+        except Exception as exc:
+            raise PipelineError(502, "The model request failed") from exc
+        return parse_answer(reply, question.text)
+
     @app.post("/api/process", response_model=ProcessResponse)
     async def process(
         request: Request,
@@ -114,9 +142,7 @@ def create_app(
         describe: str | None = Form(default=None),
     ) -> ProcessResult | StreamingResponse:
         settings_for_request: Settings = request.app.state.settings
-        client = request.client.host if request.client else "unknown"
-        if not request.app.state.limiter.allow(client):
-            raise PipelineError(429, "Too many requests. Wait a minute and try again.")
+        _check_rate(request)
         content_type = image.content_type or ""
         image_bytes = await _read_upload(image, settings_for_request.max_upload_bytes)
         selected = custom_concepts_for_request(
@@ -156,6 +182,13 @@ def create_app(
         )
 
     return app
+
+
+def _check_rate(request: Request) -> None:
+    """One limit, shared by /api/process and /api/ask, per client address."""
+    client = request.client.host if request.client else "unknown"
+    if not request.app.state.limiter.allow(client):
+        raise PipelineError(429, "Too many requests. Wait a minute and try again.")
 
 
 async def _pipeline_error(_request: Request, exc: Exception) -> JSONResponse:
