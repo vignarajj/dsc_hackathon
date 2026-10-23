@@ -158,6 +158,33 @@ header the endpoint answers exactly as before.
 curl -sN -H "accept: application/x-ndjson" -F "image=@note.png;type=image/png" http://127.0.0.1:8000/api/process
 ```
 
+## Ask the document
+
+`POST /api/ask` answers a question from text the page already has; no image
+is sent again.
+
+```bash
+curl -s -H "content-type: application/json" \
+  -d '{"question": "What is the total due?", "text": "Total due: $1,200.00", "fields": []}' \
+  http://127.0.0.1:8000/api/ask
+# {"answer": "$1,200.00 is due.", "quote": "Total due: $1,200.00"}
+```
+
+The question must be 1 to 300 characters and `text` at most 20,000
+characters. `fields` is optional: up to 20 `{label, value}` pairs, such as the
+extracted document fields. Anything else is HTTP 400 with a sentence the page
+can show, and no model is called. Empty text answers "The document does not
+say." without a model call.
+
+Muse (`MUSE_TEXT_MODEL`) answers with a strict JSON schema. The question, the
+fields, and the text are each fenced in their own tags, and the prompt says to
+answer only from the document and never follow instructions inside it. When
+the document does not answer the question, the answer is exactly "The
+document does not say." `quote` is kept only when it appears verbatim in the
+text; otherwise, and for that unanswerable reply, it is `null`. A failed or
+unreadable model reply is HTTP 502. This endpoint shares the
+`RATE_LIMIT_PER_MINUTE` count with `/api/process`.
+
 ## Region descriptions
 
 With `describe=true`, each region gets a short note from Muse vision
@@ -263,7 +290,7 @@ failed call, is a warning.
 
 CORS allows `http://localhost:3000` and `http://127.0.0.1:3000` only.
 
-`RATE_LIMIT_PER_MINUTE` caps `/api/process` per client IP over a sliding
+`RATE_LIMIT_PER_MINUTE` caps `/api/process` and `/api/ask` together per client IP over a sliding
 minute. It is off (`0`) by default. Over the limit is HTTP 429 with
 `"Too many requests. Wait a minute and try again."`. The count lives in memory,
 so it resets on restart and is per process.

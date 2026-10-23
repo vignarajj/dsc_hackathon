@@ -6,7 +6,17 @@ import { cleanedMarkdownName, markdownForCleanedText } from "@/lib/cleaned-text"
 import type { ProcessResponse } from "@/lib/process-client";
 import { textChanges, type TextChange } from "@/lib/text-diff";
 
-export function TextTab({ result, fileName }: { result: ProcessResponse; fileName: string }) {
+import { AskBox } from "./ask-box";
+
+export function TextTab({
+  result,
+  fileName,
+  apiBase,
+}: {
+  result: ProcessResponse;
+  fileName: string;
+  apiBase: string;
+}) {
   const [notice, setNotice] = useState<string | null>(null);
   const cleaned = result.cleaned_text;
   const hasText = cleaned.trim().length > 0;
@@ -40,7 +50,16 @@ export function TextTab({ result, fileName }: { result: ProcessResponse; fileNam
     URL.revokeObjectURL(url);
   }
 
-  return <Reading result={result} notice={notice} onCopy={copyText} onDownload={downloadText} />;
+  return (
+    <div className="flex flex-col gap-4 rounded-3xl border border-line bg-paper p-5">
+      <Reading result={result} notice={notice} onCopy={copyText} onDownload={downloadText} />
+      <AskBox
+        apiBase={apiBase}
+        text={result.cleaned_text.trim() ? result.cleaned_text : result.original_text}
+        document={result.document}
+      />
+    </div>
+  );
 }
 
 function Reading({
@@ -60,7 +79,7 @@ function Reading({
   const changes = unchanged ? [] : textChanges(result.original_text, result.cleaned_text);
 
   return (
-    <div className="flex flex-col gap-4 rounded-3xl border border-line bg-paper p-5">
+    <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-display text-2xl font-normal">Cleaned text</h2>
         <div className="flex flex-wrap items-center gap-2">

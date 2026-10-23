@@ -619,7 +619,9 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
               {
                 id: "text",
                 label: "Text",
-                panel: <TextTab result={result} fileName={file?.name ?? "screenshot"} />,
+                panel: (
+                  <TextTab result={result} fileName={file?.name ?? "screenshot"} apiBase={apiBase} />
+                ),
               },
               {
                 id: "data",

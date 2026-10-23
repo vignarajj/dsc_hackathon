@@ -44,6 +44,10 @@ If the read fails and the file is still selected, Try again sends that file once
 
 A 67 second recording of the polished page is at `../demo/final-demo.webm`. The earlier happy path is at `../demo/happy-path.webm`. Both were recorded before the region checkboxes, the proofread comparison, Try again, Cancel, region counts, overlay download, and everything in the feature expansion plan.
 
+## Ask the document
+
+Under the text comparison in the Text tab, Ask the document sends a question to `POST /api/ask` with the proofread text and any extracted fields. The image is not sent again. Three suggested questions match the document type, such as "What is the total due?" for an invoice, with general ones when the type is unknown. Each answer is listed newest first under its question. When Muse points to the exact words, they are shown as a quote from the page; a quote that is not really in the text is never shown. A question the page cannot answer gets "The document does not say." Questions are limited to 300 characters, and the page sends at most the first 20,000 characters of text.
+
 ## Progress
 
 The page asks the API to stream its progress. While a request runs, a list under the progress bar shows each step the API planned (preparing the image, finding regions with SAM, reading the text with Muse, proofreading, and, when chosen, pulling out fields and finding personal details, then building the overlay and share-safe copy). Each step is marked waiting, in progress, or done, with a short detail such as how many of each region were found. Cancel closes the stream, and the API then stops the request instead of finishing it. An API that does not stream still works: the page reads its plain JSON answer and shows no step list.
