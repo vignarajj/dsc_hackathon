@@ -14,10 +14,12 @@ import {
   type ProcessResponse,
   redactField,
   type RedactStyle,
+  type StageState,
   validateImageFile,
 } from "@/lib/process-client";
 import { SAMPLES, type SampleId, loadSample, sampleThumbUrl } from "@/lib/samples";
 
+import { ProgressList } from "./progress-list";
 import { DataTab } from "./results/data-tab";
 import { type RegionId, REGION_LABELS, regionLabel, swatchFor } from "./results/labels";
 import { Overview } from "./results/overview";
@@ -76,6 +78,7 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
   const [loadingSample, setLoadingSample] = useState<SampleId | null>(null);
   const [runs, setRuns] = useState(0);
   const [appliedExtract, setAppliedExtract] = useState(false);
+  const [stages, setStages] = useState<StageState[]>([]);
   const [result, setResult] = useState<ProcessResponse | null>(null);
   const [dragging, setDragging] = useState(false);
   const [regions, setRegions] = useState<Record<RegionId, boolean>>(ALL_REGIONS);
@@ -197,6 +200,7 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
     setStatus("loading");
     setError(null);
     setResult(null);
+    setStages([]);
     try {
       const processed = await processImage(file, apiBase, {
         concepts: sent.concepts,
@@ -206,6 +210,7 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
         redactText: sent.text,
         extract: sent.extract,
         signal: controller.signal,
+        onProgress: setStages,
       });
       setResult(processed);
       setAppliedConcepts([conceptsField(sent.concepts), ...sent.custom].filter(Boolean).join(","));
@@ -537,8 +542,15 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
         <div className="mt-6">
           <div className="reading-bar w-full" />
           <p role="status" className="mt-3 text-sm text-muted">
-            Reading the image. This can take up to a minute.
+            {stages.length > 0
+              ? `${stages.filter((item) => item.status === "done").length} of ${stages.length} steps done. This can take up to a minute.`
+              : "Reading the image. This can take up to a minute."}
           </p>
+          {stages.length > 0 ? (
+            <div className="mt-3">
+              <ProgressList stages={stages} />
+            </div>
+          ) : null}
         </div>
       ) : null}
 

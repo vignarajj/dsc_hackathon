@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from dsc_backend.config import Settings, load_settings
@@ -15,8 +15,10 @@ from dsc_backend.form import (
     flag_for_request,
     redaction_for_request,
 )
+from dsc_backend.imaging import prepare_image
 from dsc_backend.meta import MetaGateway, OpenAIGateway
 from dsc_backend.pipeline import ProcessResult, process_image
+from dsc_backend.progress import Emit, ndjson_stream
 from dsc_backend.ratelimit import RateLimiter
 
 logger = logging.getLogger("dsc")
@@ -108,7 +110,7 @@ def create_app(
         redact_style: str | None = Form(default=None),
         redact_text: str | None = Form(default=None),
         extract: str | None = Form(default=None),
-    ) -> ProcessResult:
+    ) -> ProcessResult | StreamingResponse:
         settings_for_request: Settings = request.app.state.settings
         client = request.client.host if request.client else "unknown"
         if not request.app.state.limiter.allow(client):
@@ -120,14 +122,33 @@ def create_app(
         )
         redaction = redaction_for_request(redact, redact_style, selected, redact_text)
         wants_document = flag_for_request(extract, "extract")
-        return await process_image(
-            image_bytes,
-            content_type,
-            request.app.state.gateway,
-            settings_for_request,
-            selected,
-            redaction,
-            wants_document,
+        # Decode before any streaming starts, so a bad upload is still a plain 400.
+        prepared = prepare_image(image_bytes, content_type, settings_for_request.max_image_edge)
+        gateway_for_request: MetaGateway = request.app.state.gateway
+
+        async def run(emit: Emit | None = None) -> ProcessResult:
+            return await process_image(
+                prepared,
+                gateway_for_request,
+                settings_for_request,
+                selected,
+                redaction,
+                wants_document,
+                emit,
+            )
+
+        if "application/x-ndjson" not in request.headers.get("accept", ""):
+            return await run()
+
+        async def work(emit: Emit) -> dict[str, object]:
+            result = await run(emit)
+            return ProcessResponse.model_validate(result, from_attributes=True).model_dump()
+
+        return StreamingResponse(
+            ndjson_stream(work),
+            media_type="application/x-ndjson",
+            # Ask proxies not to buffer, so each stage reaches the page as it happens.
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
     return app

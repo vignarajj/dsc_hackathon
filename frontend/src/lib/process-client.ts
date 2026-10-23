@@ -56,6 +56,20 @@ export type ProcessResponse = {
 
 export type RedactStyle = "black" | "blur";
 
+export type StageStatus = "waiting" | "running" | "done";
+
+export type StageState = {
+  stage: string;
+  status: StageStatus;
+  detail: string | null;
+};
+
+type StreamEvent =
+  | { event: "stages"; stages: string[] }
+  | { event: "stage"; stage: string; status: "running" | "done"; detail: string | null }
+  | { event: "result"; data: unknown }
+  | { event: "error"; status: number; detail: string };
+
 export type RegionCount = {
   label: string;
   count: number;
@@ -148,6 +162,8 @@ export type ProcessRequest = {
   redactStyle?: RedactStyle;
   redactText?: boolean;
   extract?: boolean;
+  /** Called as each stage starts and finishes. Asks the API to stream its progress. */
+  onProgress?: (stages: StageState[]) => void;
   fetchImpl?: typeof fetch;
   signal?: AbortSignal;
   timeoutMs?: number;
@@ -290,7 +306,7 @@ export async function processImage(
   const signal = request.signal ? AbortSignal.any([request.signal, timeout]) : timeout;
 
   try {
-    return await send(fetchImpl, endpoint, body, signal, request.signal, timeout);
+    return await send(fetchImpl, endpoint, body, signal, request.signal, timeout, request.onProgress);
   } finally {
     clearTimeout(timeoutId);
   }
@@ -303,10 +319,12 @@ async function send(
   signal: AbortSignal,
   cancel: AbortSignal | undefined,
   timeout: AbortSignal,
+  onProgress?: (stages: StageState[]) => void,
 ): Promise<ProcessResponse> {
   let response: Response;
   try {
-    response = await fetchImpl(endpoint, { method: "POST", body, signal });
+    const headers = onProgress ? { accept: "application/x-ndjson" } : undefined;
+    response = await fetchImpl(endpoint, { method: "POST", body, signal, headers });
   } catch {
     throw abortError(cancel, timeout) ??
       new Error("Could not reach the cleaner. Start the backend and try again.");
@@ -320,6 +338,11 @@ async function send(
       payload = null;
     }
     throw new Error(readErrorDetail(response.status, payload));
+  }
+
+  const streamed = response.headers.get("content-type")?.includes("application/x-ndjson");
+  if (onProgress && streamed && response.body) {
+    return readStream(response.body, onProgress, cancel, timeout);
   }
 
   let payload: unknown;
@@ -435,4 +458,101 @@ function parseDocument(value: unknown): DocumentData | null {
       return [{ label: field.label, value: field.value, found_in_text: field.found_in_text === true }];
     }),
   };
+}
+
+/** Split off complete lines. The rest is a partial line to keep for the next chunk. */
+export function splitLines(buffer: string): { lines: string[]; rest: string } {
+  const parts = buffer.split("\n");
+  const rest = parts.pop() ?? "";
+  return { lines: parts.filter((line) => line.trim().length > 0), rest };
+}
+
+/** Fold one stream event into the stage list. Unknown events leave it unchanged. */
+export function applyStageEvent(stages: StageState[], line: string): StageState[] {
+  const event = parseStreamEvent(line);
+  if (event?.event === "stages") {
+    return event.stages.map((stage) => ({ stage, status: "waiting", detail: null }));
+  }
+  if (event?.event === "stage") {
+    return stages.map((item) =>
+      item.stage === event.stage ? { ...item, status: event.status, detail: event.detail } : item,
+    );
+  }
+  return stages;
+}
+
+function parseStreamEvent(line: string): StreamEvent | null {
+  let value: unknown;
+  try {
+    value = JSON.parse(line);
+  } catch {
+    return null;
+  }
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const event = value as Record<string, unknown>;
+  if (event.event === "stages" && Array.isArray(event.stages)) {
+    return { event: "stages", stages: event.stages.filter((stage) => typeof stage === "string") };
+  }
+  if (
+    event.event === "stage" &&
+    typeof event.stage === "string" &&
+    (event.status === "running" || event.status === "done")
+  ) {
+    const detail = typeof event.detail === "string" ? event.detail : null;
+    return { event: "stage", stage: event.stage, status: event.status, detail };
+  }
+  if (event.event === "result") {
+    return { event: "result", data: event.data };
+  }
+  if (event.event === "error") {
+    const status = typeof event.status === "number" ? event.status : 502;
+    return { event: "error", status, detail: readErrorDetail(status, event) };
+  }
+  return null;
+}
+
+async function readStream(
+  body: ReadableStream<Uint8Array>,
+  onProgress: (stages: StageState[]) => void,
+  cancel: AbortSignal | undefined,
+  timeout: AbortSignal,
+): Promise<ProcessResponse> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let stages: StageState[] = [];
+  try {
+    for (;;) {
+      let chunk: ReadableStreamReadResult<Uint8Array>;
+      try {
+        chunk = await reader.read();
+      } catch {
+        throw abortError(cancel, timeout) ?? new Error("The connection to the cleaner was lost.");
+      }
+      buffer += decoder.decode(chunk.value, { stream: !chunk.done });
+      const { lines, rest } = splitLines(chunk.done ? `${buffer}\n` : buffer);
+      buffer = rest;
+      for (const line of lines) {
+        const event = parseStreamEvent(line);
+        if (event?.event === "result") {
+          return parseProcessResponse(event.data);
+        }
+        if (event?.event === "error") {
+          throw new Error(event.detail);
+        }
+        const next = applyStageEvent(stages, line);
+        if (next !== stages) {
+          stages = next;
+          onProgress(stages);
+        }
+      }
+      if (chunk.done) {
+        throw new Error("The cleaner stopped before it finished. Try again.");
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
 }

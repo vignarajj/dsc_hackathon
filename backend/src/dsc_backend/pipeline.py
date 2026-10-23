@@ -8,9 +8,16 @@ from dsc_backend.config import Settings
 from dsc_backend.errors import PipelineError
 from dsc_backend.extraction import Document, InvalidDocument, parse_document
 from dsc_backend.form import Redaction
-from dsc_backend.imaging import palette, prepare_image, region_colors, render_overlay
+from dsc_backend.imaging import (
+    Colors,
+    PreparedImage,
+    palette,
+    region_colors,
+    render_overlay,
+)
 from dsc_backend.meta import MetaGateway
 from dsc_backend.privacy import Span, mask_text, merge_spans, occurs, pattern_spans, surnames
+from dsc_backend.progress import Emit, Progress
 from dsc_backend.redaction import render_redacted
 from dsc_backend.regions import Region, clamp_box
 
@@ -44,53 +51,63 @@ class ProcessResult:
 
 
 async def process_image(
-    image_bytes: bytes,
-    content_type: str,
+    prepared: PreparedImage,
     gateway: MetaGateway,
     settings: Settings,
     concepts: tuple[str, ...] | None = None,
     redaction: Redaction | None = None,
     extract: bool = False,
+    emit: Emit | None = None,
 ) -> ProcessResult:
-    prepared = prepare_image(image_bytes, content_type, settings.max_image_edge)
+    """Run every step on an image already checked by prepare_image.
+
+    emit, when given, receives an event as each stage starts and finishes.
+    """
     selected = settings.sam_concepts if concepts is None else concepts
     hide = redaction or Redaction()
     width, height = prepared.image.size
     warnings: list[str] = []
-    signature_task = None
+    progress = Progress(emit)
+    await progress.plan(
+        ["prepare"]
+        + (["segment"] if selected else [])
+        + ["transcribe", "proofread"]
+        + (["extract"] if extract else [])
+        + (["privacy"] if hide.text else [])
+        + ["render"]
+    )
+    await progress.done("prepare", f"{width}x{height}")
+
+    segment_task = None
     try:
         async with asyncio.TaskGroup() as group:
-            segment_tasks = [
-                group.create_task(gateway.segment(prepared.data_url, concept))
-                for concept in selected
-            ]
-            transcript_task = group.create_task(gateway.transcribe(prepared.data_url))
-            if "signature" in selected:
-                signature_task = group.create_task(
-                    _optional(gateway.signatures(prepared.data_url, width, height))
+            if selected:
+                segment_task = group.create_task(
+                    progress.run(
+                        "segment",
+                        _segment(gateway, prepared.data_url, selected, width, height),
+                        lambda found: _region_summary(selected, found[0]),
+                    )
                 )
+            transcript_task = group.create_task(
+                progress.run(
+                    "transcribe",
+                    gateway.transcribe(prepared.data_url),
+                    lambda text: f"{len(text.strip())} characters",
+                )
+            )
     except ExceptionGroup as group:
         raise _from_group(group) from group
 
-    muse_signatures: list[Region] = []
-    signatures_failed = False
-    if signature_task is not None:
-        found = signature_task.result()
-        if found is None:
-            signatures_failed = True
-            warnings.append(
-                "Signatures could not be located, so none are "
-                + ("marked or hidden." if "signature" in hide.labels else "marked.")
-            )
-        else:
-            muse_signatures = found
-
+    found_by_concept, signatures_failed = segment_task.result() if segment_task else ([], False)
+    if signatures_failed:
+        warnings.append(
+            "Signatures could not be located, so none are "
+            + ("marked or hidden." if "signature" in hide.labels else "marked.")
+        )
     regions: list[Region] = []
     boxes: list[Box] = []
-    for concept, task in zip(selected, segment_tasks, strict=True):
-        found_regions = task.result()
-        if concept == "signature":
-            found_regions = found_regions + _new_regions(muse_signatures, found_regions)
+    for found_regions in found_by_concept:
         for region in found_regions:
             # Report the part of the box on the working image; drop boxes off it.
             clamped = clamp_box(region.x, region.y, region.w, region.h, width, height)
@@ -100,29 +117,44 @@ async def process_image(
             regions.append(region)
             boxes.append(Box(x=x, y=y, w=w, h=h, label=region.label, score=region.score))
     original_text = transcript_task.result().strip()
+
     model_task = None
     extract_task = None
     try:
         async with asyncio.TaskGroup() as group:
-            proofread_task = group.create_task(_proofread(gateway, original_text))
-            if hide.text and original_text:
-                model_task = group.create_task(_optional(gateway.sensitive_spans(original_text)))
-            if extract and original_text:
-                extract_task = group.create_task(_optional(_extract(gateway, original_text)))
+            proofread_task = group.create_task(
+                progress.run("proofread", _proofread(gateway, original_text))
+            )
+            if hide.text:
+                model_task = group.create_task(
+                    progress.run(
+                        "privacy",
+                        _optional(gateway.sensitive_spans(original_text))
+                        if original_text
+                        else _nothing([]),
+                    )
+                )
+            if extract:
+                extract_task = group.create_task(
+                    progress.run(
+                        "extract",
+                        _optional(_extract(gateway, original_text))
+                        if original_text
+                        else _nothing(""),
+                    )
+                )
     except ExceptionGroup as group:
         raise _from_group(group) from group
     cleaned_text = proofread_task.result()
 
     document: Document | None = None
-    if extract_task is not None:
+    if extract_task is not None and original_text:
         reply = extract_task.result()
         if reply is None:
             warnings.append("Muse could not pull out the document's fields.")
         else:
             # Checked against both texts, since the proofread may fix a misread value.
             document = parse_document(reply, original_text, cleaned_text)
-    colors = region_colors(selected)
-    overlay = render_overlay(prepared.image, regions, colors)
 
     sensitive: list[Span] = []
     shareable_text: str | None = None
@@ -131,29 +163,21 @@ async def process_image(
             original_text, cleaned_text, model_task.result() if model_task else [], warnings
         )
 
-    text_boxes: list[tuple[int, int, int, int]] | None = None
-    if hide.text and settings.redact_image_text and sensitive:
-        text_boxes = await _locate_text(gateway, prepared.data_url, width, height, sensitive)
-        if text_boxes is None:
-            warnings.append("Text in the picture could not be located, so it is not hidden.")
-        elif len(text_boxes) < len(_lines(sensitive)):
-            warnings.append(
-                "Some sensitive text was not found in the picture, so it is not hidden there."
-            )
-
-    redacted: bytes | None = None
-    if hide.labels or text_boxes is not None:
-        boxes_found = [box for found in (text_boxes or {}).values() for box in found]
-        redacted, hidden = render_redacted(
-            prepared.image, regions, hide.labels, hide.style, boxes_found
-        )
-        for label in hide.labels:
-            if label == "signature" and signatures_failed:
-                continue
-            if not any(region.label == label for region in regions):
-                warnings.append(f"No {label} was found, so none is hidden.")
-    else:
-        hidden = 0
+    colors = region_colors(selected)
+    overlay, redacted, text_boxes, hidden = await progress.run(
+        "render",
+        _render(
+            gateway,
+            settings,
+            prepared,
+            regions,
+            hide,
+            sensitive,
+            colors,
+            signatures_failed,
+            warnings,
+        ),
+    )
     logger.info(
         "processed concepts=%s boxes=%s hidden=%s text_chars=%s",
         ",".join(selected) or "-",
@@ -184,6 +208,80 @@ async def process_image(
         document=document,
         warnings=warnings,
     )
+
+
+async def _segment(
+    gateway: MetaGateway,
+    data_url: str,
+    selected: tuple[str, ...],
+    width: int,
+    height: int,
+) -> tuple[list[list[Region]], bool]:
+    """SAM for every concept and, for signatures, Muse boxes too, all at once.
+
+    Returns the regions for each concept in order, and whether the Muse
+    signature lookup failed.
+    """
+    signature_task = None
+    async with asyncio.TaskGroup() as group:
+        tasks = [group.create_task(gateway.segment(data_url, concept)) for concept in selected]
+        if "signature" in selected:
+            signature_task = group.create_task(
+                _optional(gateway.signatures(data_url, width, height))
+            )
+    muse_signatures = signature_task.result() if signature_task else []
+    found: list[list[Region]] = []
+    for concept, task in zip(selected, tasks, strict=True):
+        regions = task.result()
+        if concept == "signature" and muse_signatures:
+            regions = regions + _new_regions(muse_signatures, regions)
+        found.append(regions)
+    return found, signature_task is not None and muse_signatures is None
+
+
+async def _render(
+    gateway: MetaGateway,
+    settings: Settings,
+    prepared: PreparedImage,
+    regions: list[Region],
+    hide: Redaction,
+    sensitive: list[Span],
+    colors: Colors,
+    signatures_failed: bool,
+    warnings: list[str],
+) -> tuple[bytes, bytes | None, dict[str, list[tuple[int, int, int, int]]] | None, int]:
+    """Draw the overlay and build the share-safe copy."""
+    width, height = prepared.image.size
+    overlay = render_overlay(prepared.image, regions, colors)
+    text_boxes = None
+    if hide.text and settings.redact_image_text and sensitive:
+        text_boxes = await _locate_text(gateway, prepared.data_url, width, height, sensitive)
+        if text_boxes is None:
+            warnings.append("Text in the picture could not be located, so it is not hidden.")
+        elif len(text_boxes) < len(_lines(sensitive)):
+            warnings.append(
+                "Some sensitive text was not found in the picture, so it is not hidden there."
+            )
+    if not hide.labels and text_boxes is None:
+        return overlay, None, None, 0
+    boxes_found = [box for found in (text_boxes or {}).values() for box in found]
+    redacted, hidden = render_redacted(
+        prepared.image, regions, hide.labels, hide.style, boxes_found
+    )
+    for label in hide.labels:
+        if label == "signature" and signatures_failed:
+            continue
+        if not any(region.label == label for region in regions):
+            warnings.append(f"No {label} was found, so none is hidden.")
+    return overlay, redacted, text_boxes, hidden
+
+
+def _region_summary(selected: tuple[str, ...], found: list[list[Region]]) -> str:
+    return ", ".join(f"{concept}: {len(regions)}" for concept, regions in zip(selected, found))
+
+
+async def _nothing[T](value: T) -> T:
+    return value
 
 
 async def _extract(gateway: MetaGateway, transcript: str) -> str:

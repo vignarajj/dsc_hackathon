@@ -117,6 +117,40 @@ working image with no masks. That is a successful response.
    call. Timeout or upstream failure is HTTP 502 with `{"detail": "..."}`.
    The upload page can send the same image again as a new request.
 
+## Live progress
+
+Send `Accept: application/x-ndjson` and the same endpoint streams its progress
+as one JSON object per line, then the result:
+
+```text
+{"event": "stages", "stages": ["prepare", "segment", "transcribe", "proofread", "render"]}
+{"event": "stage", "stage": "prepare", "status": "done", "detail": "1287x1600"}
+{"event": "stage", "stage": "segment", "status": "running", "detail": null}
+{"event": "stage", "stage": "segment", "status": "done", "detail": "stamp: 1, signature: 1"}
+...
+{"event": "result", "data": { ...the usual response... }}
+```
+
+The first line lists only the stages this request will run: `prepare`,
+`segment` (when regions are marked), `transcribe`, `proofread`, `extract`
+(with `extract=true`), `privacy` (with `redact_text=true`), and `render`. Each
+stage then sends `running` and `done`; `segment` and `transcribe` run at the
+same time, as do `proofread`, `extract`, and `privacy`. The last line is either
+`result`, whose `data` is the same JSON as a plain request, or
+`{"event": "error", "status": 502, "detail": "..."}` when a model call fails
+part way. Upload, form, and rate-limit errors (400, 413, 429) are still plain
+HTTP errors sent before any streaming starts.
+
+If the client disconnects, the request is cancelled and no further model
+calls are made. The response sets `Cache-Control: no-cache` and
+`X-Accel-Buffering: no` so a proxy passes each line on at once; a proxy that
+buffers anyway delays the progress but not the result. Without that `Accept`
+header the endpoint answers exactly as before.
+
+```bash
+curl -sN -H "accept: application/x-ndjson" -F "image=@note.png;type=image/png" http://127.0.0.1:8000/api/process
+```
+
 ## Custom regions
 
 `custom` lets SAM look for things beyond the four presets. Each name is
