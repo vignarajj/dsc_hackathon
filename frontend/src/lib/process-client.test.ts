@@ -492,3 +492,31 @@ describe("processImage streaming", () => {
     assert.equal(accept, null);
   });
 });
+
+describe("region descriptions", () => {
+  it("are parsed when present and sent only when asked", async () => {
+    const file = new File([new Uint8Array([1])], "form.png", { type: "image/png" });
+    const sent: string[] = [];
+    const result = await processImage(file, "http://127.0.0.1:8000", {
+      describe: true,
+      fetchImpl: async (_input, init) => {
+        sent.push(String((init?.body as FormData).get("describe")));
+        return jsonResponse(200, {
+          boxes: [
+            { x: 1, y: 2, w: 3, h: 4, label: "stamp", score: 0.9, description: "Round red stamp" },
+            { x: 1, y: 2, w: 3, h: 4, label: "stamp", score: 0.8, description: "  " },
+            { x: 1, y: 2, w: 3, h: 4, label: "stamp", score: 0.7 },
+          ],
+          overlay_png_base64: overlay,
+          original_text: "",
+          cleaned_text: "",
+        });
+      },
+    });
+    assert.deepEqual(sent, ["true"]);
+    assert.deepEqual(
+      result.boxes.map((box) => box.description),
+      ["Round red stamp", null, null],
+    );
+  });
+});

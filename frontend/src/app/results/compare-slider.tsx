@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-export type HighlightBox = { x: number; y: number; w: number; h: number };
+export type HighlightBox = { x: number; y: number; w: number; h: number; note?: string | null };
 
 /** The "before" picture left of the handle, the "after" picture right of it. */
 export function CompareSlider({
@@ -72,7 +72,18 @@ export function CompareSlider({
                     outline: `3px solid ${highlightColor}`,
                     outlineOffset: "2px",
                   }}
-                />
+                >
+                  {box.note ? (
+                    <span
+                      // Open toward the middle of the picture, so the frame never clips it.
+                      className={`absolute w-max max-w-[min(14rem,60vw)] rounded-lg bg-foreground px-2 py-1 text-xs text-background shadow ${
+                        box.x + box.w / 2 > natural.w / 2 ? "right-0" : "left-0"
+                      } ${box.y + box.h > natural.h * 0.8 ? "bottom-full mb-1.5" : "top-full mt-1.5"}`}
+                    >
+                      {box.note}
+                    </span>
+                  ) : null}
+                </div>
               ))
             : null}
         </div>

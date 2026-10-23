@@ -76,6 +76,12 @@ _EXTRACT_PROMPT = (
 )
 _REPAIR_NOTE = " Your last answer could not be used: {problem} Answer again with valid JSON only."
 
+_DESCRIBE_PROMPT = (
+    "Describe this cropped part of a document in at most 12 words. "
+    "If it contains readable text, quote it. "
+    "Never name or guess who a person is, and do not guess anything not visible."
+)
+
 # Region name -> SAM prompt, where they differ. In the F0 spike "photograph"
 # found nothing and "photo" found every portrait.
 SAM_PROMPTS = {"photograph": "photo"}
@@ -122,6 +128,8 @@ class MetaGateway(Protocol):
     async def sensitive_spans(self, text: str) -> list[Span]: ...
 
     async def extract(self, text: str, problem: str | None = None) -> str: ...
+
+    async def describe_region(self, data_url: str) -> str: ...
 
     async def text_boxes(
         self, data_url: str, width: int, height: int, lines: list[str]
@@ -283,6 +291,21 @@ class OpenAIGateway:
                 }
             ],
             text_format=EXTRACT_FORMAT,
+        )
+
+    async def describe_region(self, data_url: str) -> str:
+        return await self._text_response(
+            self._settings.muse_vision_model,
+            [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [
+                        {"type": "input_text", "text": _DESCRIBE_PROMPT},
+                        {"type": "input_image", "image_url": data_url},
+                    ],
+                }
+            ],
         )
 
     async def _text_response(

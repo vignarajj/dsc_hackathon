@@ -11,6 +11,7 @@ export type ProcessBox = {
   h: number;
   label: string;
   score: number | null;
+  description: string | null;
 };
 
 export type ProcessModels = {
@@ -162,6 +163,7 @@ export type ProcessRequest = {
   redactStyle?: RedactStyle;
   redactText?: boolean;
   extract?: boolean;
+  describe?: boolean;
   /** Called as each stage starts and finishes. Asks the API to stream its progress. */
   onProgress?: (stages: StageState[]) => void;
   fetchImpl?: typeof fetch;
@@ -299,6 +301,7 @@ export async function processImage(
   body.append("redact_style", request.redactStyle ?? "black");
   body.append("redact_text", request.redactText ? "true" : "false");
   body.append("extract", request.extract ? "true" : "false");
+  body.append("describe", request.describe ? "true" : "false");
   const endpoint = `${apiBase.replace(/\/$/, "")}/api/process`;
   const timer = new AbortController();
   const timeoutId = setTimeout(() => timer.abort(), request.timeoutMs ?? REQUEST_TIMEOUT_MS);
@@ -400,7 +403,9 @@ function parseBox(value: unknown): ProcessBox[] {
     return [];
   }
   const score = typeof box.score === "number" ? box.score : null;
-  return [{ x: box.x, y: box.y, w: box.w, h: box.h, label: box.label, score }];
+  const description =
+    typeof box.description === "string" && box.description.trim() ? box.description : null;
+  return [{ x: box.x, y: box.y, w: box.w, h: box.h, label: box.label, score, description }];
 }
 
 function parseSensitive(value: unknown): SensitiveItem[] {

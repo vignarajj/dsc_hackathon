@@ -50,6 +50,7 @@ class BoxModel(BaseModel):
     h: int
     label: str
     score: float | None
+    description: str | None
 
 
 class ProcessResponse(BaseModel):
@@ -110,6 +111,7 @@ def create_app(
         redact_style: str | None = Form(default=None),
         redact_text: str | None = Form(default=None),
         extract: str | None = Form(default=None),
+        describe: str | None = Form(default=None),
     ) -> ProcessResult | StreamingResponse:
         settings_for_request: Settings = request.app.state.settings
         client = request.client.host if request.client else "unknown"
@@ -122,6 +124,7 @@ def create_app(
         )
         redaction = redaction_for_request(redact, redact_style, selected, redact_text)
         wants_document = flag_for_request(extract, "extract")
+        wants_notes = flag_for_request(describe, "describe")
         # Decode before any streaming starts, so a bad upload is still a plain 400.
         prepared = prepare_image(image_bytes, content_type, settings_for_request.max_image_edge)
         gateway_for_request: MetaGateway = request.app.state.gateway
@@ -135,6 +138,7 @@ def create_app(
                 redaction,
                 wants_document,
                 emit,
+                wants_notes,
             )
 
         if "application/x-ndjson" not in request.headers.get("accept", ""):

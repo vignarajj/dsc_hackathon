@@ -3,6 +3,7 @@ import type { StageState } from "@/lib/process-client";
 const STAGE_LABELS: Record<string, string> = {
   prepare: "Preparing the image",
   segment: "Finding regions with SAM",
+  describe: "Describing each region",
   transcribe: "Reading the text with Muse",
   proofread: "Proofreading",
   extract: "Pulling out key fields",

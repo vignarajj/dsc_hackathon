@@ -56,6 +56,7 @@ type Choices = {
   style: RedactStyle;
   text: boolean;
   extract: boolean;
+  describe: boolean;
 };
 
 function choicesKey(choices: Choices): string {
@@ -66,6 +67,7 @@ function choicesKey(choices: Choices): string {
     choices.style,
     choices.text,
     choices.extract,
+    choices.describe,
   ].join("|");
 }
 
@@ -91,6 +93,7 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
   const [style, setStyle] = useState<RedactStyle>("black");
   const [hideText, setHideText] = useState(true);
   const [extract, setExtract] = useState(true);
+  const [describe, setDescribe] = useState(false);
   const inFlight = useRef<AbortController | null>(null);
 
   useEffect(() => () => inFlight.current?.abort(), []);
@@ -113,6 +116,7 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
     style,
     text: hideText,
     extract,
+    describe,
   };
   const selectionChanged = result !== null && appliedKey !== choicesKey(choices);
 
@@ -209,6 +213,7 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
         redactStyle: sent.style,
         redactText: sent.text,
         extract: sent.extract,
+        describe: sent.describe,
         signal: controller.signal,
         onProgress: setStages,
       });
@@ -511,6 +516,17 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
             className="accent-stamp"
           />
           Pull out the document type and key fields
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={describe}
+            disabled={status === "loading"}
+            onChange={() => setDescribe((current) => !current)}
+            className="accent-stamp"
+          />
+          Describe each region in a few words
+          <span className="text-xs text-muted">(up to 8 more Muse calls)</span>
         </label>
         {selectionChanged ? (
           <p role="status" className="text-sm text-muted">
