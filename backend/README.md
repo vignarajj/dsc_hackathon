@@ -18,6 +18,8 @@ The process refuses to start when `META_API_KEY` is missing.
 - `GET http://127.0.0.1:8000/api/health` → `{"status":"ok"}`
 - `POST http://127.0.0.1:8000/api/process` with multipart field `image`
 - Optional multipart field `concepts`, a comma-separated list. Omit it to use `SAM_CONCEPTS`.
+- Optional multipart field `custom`: up to 3 more things for SAM to find, comma-separated,
+  such as `logo,qr code`.
 - Optional multipart field `redact`, a comma-separated list of marked regions to hide
   in a share-safe copy. Omit it for no copy.
 - Optional multipart field `redact_style`: `black` (default) or `blur`.
@@ -44,6 +46,7 @@ curl -s -F "image=@form.jpg;type=image/jpeg" -F "redact=signature,photograph" ht
     "proofread": "muse-spark-1.3",
     "signatures": "muse-spark-1.3"
   },
+  "palette": { "stamp": "#dc2626", "logo": "#7c3aed" },
   "redacted_png_base64": "<png with the chosen regions hidden, or null>",
   "sensitive": [
     { "category": "phone", "text": "07911 123456", "source": "pattern" },
@@ -56,6 +59,8 @@ curl -s -F "image=@form.jpg;type=image/jpeg" -F "redact=signature,photograph" ht
 ```
 
 `models` echoes the configured model IDs so the page can name them.
+`palette` gives the overlay fill color of every requested region, so a legend
+always matches the picture.
 `warnings` lists optional steps that failed or found nothing to hide. A warning
 never comes with an error status.
 
@@ -103,6 +108,24 @@ working image with no masks. That is a successful response.
 9. Each Meta call has a 60 second timeout. This service does not retry a model
    call. Timeout or upstream failure is HTTP 502 with `{"detail": "..."}`.
    The upload page can send the same image again as a new request.
+
+## Custom regions
+
+`custom` lets SAM look for things beyond the four presets. Each name is
+lowercased, its spaces are collapsed, and it must be 1 to 3 words of letters,
+spaces, and hyphens, 30 characters at most. Up to 3 are allowed, so a request
+makes at most 7 SAM calls. A name that means a preset (`Stamp`, `photo`)
+turns that preset on instead. Duplicates are dropped. Text prompts (`text`,
+`document`, `printed text`, `receipt`, `handwritten note`, `handwriting`,
+`handwritten text`) are HTTP 400 with "SAM marks objects, not text. Try a
+stamp, logo, or QR code.", because they found nothing in the spikes. Any
+other invalid name, or a fourth one, is HTTP 400 too, and no model is called.
+
+Custom regions are segmented after the presets, in the order sent, and keep
+their name as the box label. Their overlay colors follow that order: purple
+`#7c3aed`, teal `#0d9488`, then pink `#db2777`. They can be hidden in the
+share-safe copy like any marked region. In the F0 spike, `logo`, `qr code`,
+`barcode`, `face`, `table`, `checkbox`, and `seal` found their objects.
 
 ## Share-safe copy
 

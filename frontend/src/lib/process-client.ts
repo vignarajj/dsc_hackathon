@@ -36,6 +36,7 @@ export type ProcessResponse = {
   sensitive: SensitiveItem[];
   shareable_text: string | null;
   image_text_hidden: boolean;
+  palette: Record<string, string>;
   warnings: string[];
 };
 
@@ -60,10 +61,75 @@ export const REGION_CONCEPTS = ["stamp", "signature", "photograph", "rectangle"]
 /** Regions the share-safe copy can hide. Rectangles are layout, not private. */
 export const HIDEABLE_REGIONS = ["signature", "photograph", "stamp"] as const;
 
+export const MAX_CUSTOM = 3;
+
+/** Custom prompts that SAM found in the F0 spike. */
+export const CUSTOM_SUGGESTIONS = [
+  "logo",
+  "qr code",
+  "barcode",
+  "face",
+  "table",
+  "checkbox",
+  "seal",
+] as const;
+
+/** The API colors custom regions in this order. */
+export const CUSTOM_PALETTE = ["#7c3aed", "#0d9488", "#db2777"] as const;
+
+// These mirror the API rules in backend/src/dsc_backend/form.py.
+const CUSTOM_ALIASES: Record<string, string> = {
+  photo: "photograph",
+  stamps: "stamp",
+  signatures: "signature",
+};
+const CUSTOM_PATTERN = /^[a-z][a-z -]{0,29}$/;
+const BLOCKED_CUSTOM = new Set([
+  "text",
+  "document",
+  "printed text",
+  "receipt",
+  "handwritten note",
+  "handwriting",
+  "handwritten text",
+]);
+
+export type CustomChoice =
+  | { kind: "preset"; name: (typeof REGION_CONCEPTS)[number] }
+  | { kind: "custom"; name: string }
+  | { kind: "error"; message: string };
+
+/** Check a typed region name the way the API will. */
+export function customChoice(raw: string, existing: readonly string[]): CustomChoice {
+  const typed = raw.toLowerCase().split(/\s+/).filter(Boolean).join(" ");
+  const name = CUSTOM_ALIASES[typed] ?? typed;
+  if (!name) {
+    return { kind: "error", message: "Type what to find, like logo." };
+  }
+  const preset = REGION_CONCEPTS.find((concept) => concept === name);
+  if (preset) {
+    return { kind: "preset", name: preset };
+  }
+  if (!CUSTOM_PATTERN.test(name) || name.split(" ").length > 3) {
+    return { kind: "error", message: "Describe what to find in 1 to 3 plain words, like logo." };
+  }
+  if (BLOCKED_CUSTOM.has(name)) {
+    return { kind: "error", message: "SAM marks objects, not text. Try a stamp, logo, or QR code." };
+  }
+  if (existing.includes(name)) {
+    return { kind: "error", message: `${name} is already on the list.` };
+  }
+  if (existing.length >= MAX_CUSTOM) {
+    return { kind: "error", message: `Add up to ${MAX_CUSTOM} things to find.` };
+  }
+  return { kind: "custom", name };
+}
+
 const ACCEPTED_TYPES = new Set(["image/jpeg", "image/jpg", "image/png"]);
 
 export type ProcessRequest = {
   concepts?: readonly string[];
+  custom?: readonly string[];
   redact?: readonly string[];
   redactStyle?: RedactStyle;
   redactText?: boolean;
@@ -132,18 +198,19 @@ export function parseProcessResponse(body: unknown): ProcessResponse {
     sensitive: Array.isArray(record.sensitive) ? record.sensitive.flatMap(parseSensitive) : [],
     shareable_text: typeof record.shareable_text === "string" ? record.shareable_text : null,
     image_text_hidden: record.image_text_hidden === true,
+    palette: parsePalette(record.palette),
     warnings: Array.isArray(record.warnings)
       ? record.warnings.filter((item): item is string => typeof item === "string")
       : [],
   };
 }
 
-/** Count boxes per requested region, keeping the canonical order. */
+/** Count boxes per requested region: presets in canonical order, then custom ones. */
 export function regionCounts(
   boxes: readonly ProcessBox[],
   concepts: readonly string[],
 ): RegionCount[] {
-  return REGION_CONCEPTS.filter((concept) => concepts.includes(concept)).map((label) => {
+  return orderedLabels(concepts, []).map((label) => {
     const matching = boxes.filter((box) => box.label === label);
     const scores = matching.flatMap((box) => (box.score === null ? [] : [box.score]));
     return {
@@ -163,11 +230,22 @@ export function conceptsField(concepts: readonly string[] | undefined): string {
 export function redactField(
   redact: readonly string[] | undefined,
   concepts: readonly string[] | undefined,
+  custom: readonly string[] = [],
 ): string {
-  const marked = conceptsField(concepts).split(",");
-  return REGION_CONCEPTS.filter(
-    (concept) => (redact ?? []).includes(concept) && marked.includes(concept),
-  ).join(",");
+  const marked = conceptsField(concepts).split(",").filter(Boolean);
+  return orderedLabels(marked, custom)
+    .filter((label) => (redact ?? []).includes(label))
+    .join(",");
+}
+
+/** Presets in canonical order, then every other label in the order given. */
+function orderedLabels(labels: readonly string[], custom: readonly string[]): string[] {
+  const all = [...labels, ...custom];
+  const presets: string[] = REGION_CONCEPTS.filter((concept) => all.includes(concept));
+  const others = all.filter(
+    (label, index) => !presets.includes(label) && all.indexOf(label) === index,
+  );
+  return [...presets, ...others];
 }
 
 export async function processImage(
@@ -184,7 +262,8 @@ export async function processImage(
   const body = new FormData();
   body.append("image", file);
   body.append("concepts", conceptsField(request.concepts));
-  body.append("redact", redactField(request.redact, request.concepts));
+  body.append("custom", (request.custom ?? []).join(","));
+  body.append("redact", redactField(request.redact, request.concepts, request.custom));
   body.append("redact_style", request.redactStyle ?? "black");
   body.append("redact_text", request.redactText ? "true" : "false");
   const endpoint = `${apiBase.replace(/\/$/, "")}/api/process`;
@@ -297,4 +376,16 @@ function parseSensitive(value: unknown): SensitiveItem[] {
     return [];
   }
   return [{ category: item.category, text: item.text, source: item.source }];
+}
+
+function parsePalette(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).filter(
+      (entry): entry is [string, string] =>
+        typeof entry[1] === "string" && /^#[0-9a-f]{6}$/i.test(entry[1]),
+    ),
+  );
 }

@@ -2,7 +2,7 @@ import io
 
 from PIL import Image
 
-from dsc_backend.imaging import prepare_image, render_overlay
+from dsc_backend.imaging import palette, prepare_image, region_colors, render_overlay
 from dsc_backend.regions import Region
 
 
@@ -104,3 +104,36 @@ def test_outline_is_clipped_to_the_image() -> None:
     # The right and bottom edges are drawn on the image border, not off it.
     assert rendered.getpixel((19, 15)) != (255, 255, 255, 255)
     assert rendered.getpixel((15, 19)) != (255, 255, 255, 255)
+
+
+def test_custom_labels_take_the_palette_in_order() -> None:
+    colors = region_colors(("stamp", "logo", "qr code", "barcode"))
+    assert palette(colors) == {
+        "stamp": "#dc2626",
+        "logo": "#7c3aed",
+        "qr code": "#0d9488",
+        "barcode": "#db2777",
+    }
+
+
+def test_overlay_uses_the_color_given_for_a_custom_label() -> None:
+    image = Image.new("RGB", (12, 12), (255, 255, 255))
+    region = Region(
+        x=2,
+        y=2,
+        w=4,
+        h=4,
+        label="qr code",
+        score=0.9,
+        raster=b"\x01" * 16,
+        mask_width=4,
+        mask_height=4,
+    )
+    teal = Image.open(
+        io.BytesIO(render_overlay(image, [region], region_colors(("logo", "qr code"))))
+    )
+    purple = Image.open(io.BytesIO(render_overlay(image, [region], region_colors(("qr code",)))))
+    teal_pixel, purple_pixel = teal.getpixel((3, 3)), purple.getpixel((3, 3))
+    assert isinstance(teal_pixel, tuple) and isinstance(purple_pixel, tuple)
+    assert teal_pixel[1] > teal_pixel[0]
+    assert purple_pixel[2] > purple_pixel[1]
