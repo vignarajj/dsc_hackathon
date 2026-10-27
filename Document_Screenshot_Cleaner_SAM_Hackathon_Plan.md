@@ -339,7 +339,7 @@ Update `Status` as work progresses. Allowed values: `Not Started` →
 | 3b | Proofread diff, region toggles, retry | Added after §4 Phase 3 | Done | Yes | Yes | Yes | Page shows transcription against proofread text. `concepts` selects stamp, signature, photograph, rectangle. Try again sends a new request. |
 | 3c | Hardening and presentation | Added after 3b | Done | Yes | Yes | Yes | Faster mask drawing, boxes clipped to the image, fenced proofread prompt, optional per-IP rate limit, model names in the response. Page: Cancel, 150 s timeout, region counts with best score, overlay PNG download. CI workflow, MIT license, README diagram and screenshot. |
 | 4 | Feature expansion F0–F8 | `Feature_Expansion_Plan.md` §13 | Done | Yes | Yes | Yes | F0–F8 (share-safe copy, custom regions, extraction, demo UX and browser tests, live progress, region descriptions, ask the document, read aloud), the request budget, server feature switches, a live smoke script, and deploy configs with a guide (`docs/DEPLOY.md`). Merged to `main` in vignarajj/dsc_hackathon#1. Per-item history lives in the expansion plan's tracker. |
-| 5 | Launch: live checks, deploy, demo, submit | `docs/LAUNCH.md` | In Progress | No | Yes | Yes | Merge done. A live run on the four generated samples (40 calls) passed: 4 of 4 types right, 20 of 20 drawn-in personal details hidden. Real-photo checks, deploy, demo, and submission remain. |
+| 5 | Launch: live checks, deploy, demo, submit | `docs/LAUNCH.md` | In Progress | No | Yes | Yes | Merge done. A live run on the four generated samples (40 calls) passed: 4 of 4 types right, 20 of 20 drawn-in personal details hidden. Real-photo checks, deploy, demo, and submission remain. The tracker and results are on `main` (`c3f5678`). |
 
 ---
 

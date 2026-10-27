@@ -418,6 +418,7 @@ otherwise; checks on real photos are tracked as their own rows.
 | R2 | Demo video and final README | §9, §12 | Not Started | No | No | No | |
 | R3 | Repo public, submit on the portal | §12 | Not Started | No | No | No | Target 3 Nov. |
 | M1 | Merge into `main` | — | Done | Yes | Yes | Yes | vignarajj/dsc_hackathon#1, rebase-merged; `main` at `07a4401`. All CI jobs green, e2e for the first time on GitHub. |
+| M2 | Launch tracker and live-run results on `main` | — | Done | No | Yes | Yes | `docs/LAUNCH.md` and §14 pushed straight to `main` as a fast-forward (`c3f5678`), two docs-only commits. |
 
 ---
 
