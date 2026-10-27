@@ -1,0 +1,30 @@
+# Render blueprint for the API. In Render: New > Blueprint > this repository.
+# The page is deployed on Vercel from frontend/; see docs/DEPLOY.md.
+services:
+  - type: web
+    name: dsc-api
+    runtime: docker
+    dockerContext: ./backend
+    dockerfilePath: ./backend/Dockerfile
+    # Starter does not sleep. A free instance takes about a minute to wake,
+    # which would stall the first request of a demo.
+    plan: starter
+    healthCheckPath: /api/health
+    autoDeploy: false
+    envVars:
+      # Set in the dashboard; never commit it.
+      - key: META_API_KEY
+        sync: false
+      # The page's Vercel URL, for example https://dsc-cleaner.vercel.app
+      - key: CORS_ORIGINS
+        sync: false
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "5"
+      # Region descriptions cost up to 8 calls per image; off on the public copy.
+      - key: FEATURE_DESCRIBE
+        value: "false"
+      # Trust X-Forwarded-For only from private addresses, where Render's proxy
+      # connects from. Never "*": that lets a visitor fake their address and
+      # skip the rate limit. docs/DEPLOY.md says how to check it.
+      - key: FORWARDED_ALLOW_IPS
+        value: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"

@@ -17,6 +17,17 @@ uv run uvicorn dsc_backend.main:app --reload --port 8000
 
 The process refuses to start when `META_API_KEY` is missing.
 
+Or run the image (runtime dependencies only; tests and scripts stay out):
+
+```bash
+docker build -t dsc-api .
+docker run -p 8000:8000 -e META_API_KEY=... dsc-api
+```
+
+It listens on `PORT` (default 8000), runs as a non-root user, and checks
+`/api/health` every 30 seconds. `FORWARDED_ALLOW_IPS` (default `127.0.0.1`)
+lists the proxies trusted for `X-Forwarded-For`; see `../docs/DEPLOY.md`.
+
 - `GET http://127.0.0.1:8000/api/health` → `{"status":"ok"}`
 - `GET http://127.0.0.1:8000/api/config` → which optional features this server runs; see
   [Feature switches](#feature-switches)

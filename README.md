@@ -37,6 +37,8 @@ There is no account system, no saved history, and no multi-page document support
 | `Feature_Expansion_Plan.md` | The feature expansion plan and its status tracker (§13). |
 | `demo/final-demo.webm`, `demo/happy-path.webm` | Earlier recordings, made before the feature expansion. |
 | `docs/screenshot.png` | The upload page, shown at the top of this file. |
+| `docs/DEPLOY.md` | How to deploy a public copy, and the checks to run first. |
+| `backend/Dockerfile`, `render.yaml`, `frontend/vercel.json` | The API image, the Render blueprint for it, and the Vercel settings for the page. |
 | `.github/workflows/ci.yml` | Backend, frontend, and browser checks on every push and pull request. |
 
 ## How one upload is handled
@@ -158,9 +160,13 @@ None of these call Meta or need a key. `backend/scripts/smoke.py` is the live ch
 
 ## Hosting
 
-Nothing in this repo is deployed. Both processes are meant to run on your machine.
+Nothing in this repo is deployed yet. [`docs/DEPLOY.md`](docs/DEPLOY.md) walks through a public copy: the API from `backend/Dockerfile` on Render (`render.yaml`), and the page on Vercel (`frontend/vercel.json`), with the checks to run before sharing the URL.
 
-A public test needs the API and the page on hosts that can hold a request for up to three minutes and pass a streamed response through without buffering it. Put `META_API_KEY` in the API host's environment, not in git. Set `CORS_ORIGINS` to the page's origin, and set `NEXT_PUBLIC_API_BASE_URL` to the API's public URL at build time. The API has no login. Anyone who can reach a public copy can spend the Meta key. Set `RATE_LIMIT_PER_MINUTE` (for example `5`) on a public copy, and a spend alert on the key. To cap the calls further, turn off `FEATURE_DESCRIBE` (up to 8 calls per image) or the other feature switches. The limit is kept in memory for one process. Behind a proxy, start uvicorn with `--proxy-headers --forwarded-allow-ips=<proxy IP>` so the limit sees each visitor's address instead of the proxy's. Take the URL down when judging is over.
+```bash
+cd backend && docker build -t dsc-api . && docker run -p 8000:8000 -e META_API_KEY=... dsc-api
+```
+
+A public test needs the API and the page on hosts that can hold a request for up to three minutes and pass a streamed response through without buffering it. Put `META_API_KEY` in the API host's environment, not in git. Set `CORS_ORIGINS` to the page's origin, and set `NEXT_PUBLIC_API_BASE_URL` to the API's public URL at build time. The API has no login. Anyone who can reach a public copy can spend the Meta key. Set `RATE_LIMIT_PER_MINUTE` (for example `5`) on a public copy, and a spend alert on the key. To cap the calls further, turn off `FEATURE_DESCRIBE` (up to 8 calls per image) or the other feature switches. The limit is kept in memory for one process. Behind a proxy, set `FORWARDED_ALLOW_IPS` to the proxy's addresses (the image passes `--proxy-headers`) so the limit sees each visitor's address instead of the proxy's. Never set it to `*`: a visitor could then fake an address and skip the limit. Take the URL down when judging is over.
 
 ## More detail
 
