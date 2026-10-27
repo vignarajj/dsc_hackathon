@@ -402,7 +402,7 @@ otherwise; checks on real photos are tracked as their own rows.
 | F5 | Region descriptions | §4 F5 | Done | Yes | Yes | Yes | `a23ae58`. Off by default on the page to save calls; the plan had it on. |
 | F7 | Ask the document | §4 F7 | Done | Yes | Yes | Yes | `1ba571f`. `POST /api/ask`, verbatim quotes only, shared rate limit. |
 | D1 | READMEs and docs match the code, status tracker | §12 | Done | No | Yes | Yes | Root README rewritten; backend and frontend READMEs corrected; screenshot retaken. |
-| F8 | Read aloud | §4 F8 | Not Started | No | No | No | |
+| F8 | Read aloud | §4 F8 | Done | Yes | Yes | Yes | Browser speech, no API call. Spoken in sentence-sized pieces; hidden without speech. No language is set, since the API does not report one. |
 | H1 | Overall request budget (`REQUEST_BUDGET_SECONDS`) | §5.3 | Not Started | No | No | No | |
 | H2 | Server-side feature flags | §5.3 | Not Started | No | No | No | `FEATURE_EXTRACT`, `FEATURE_DESCRIBE`, `FEATURE_PRIVACY`; image text keeps `REDACT_IMAGE_TEXT`. |
 | H3 | Live smoke script (`backend/scripts/smoke.py`) | §6 | Not Started | No | No | No | Written without calls; running it spends calls. |
