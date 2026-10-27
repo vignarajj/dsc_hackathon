@@ -338,6 +338,7 @@ Update `Status` as work progresses. Allowed values: `Not Started` →
 | 3 | Polish, README, final video + submission | §4 Phase 3, §6 | Done | Yes | Yes | Yes | Lighter rectangle masks, usage steps, copy, and Markdown download. Final demo is `demo/final-demo.webm` (67s). Fact-checking and background removal were not added. Portal submission is still open. |
 | 3b | Proofread diff, region toggles, retry | Added after §4 Phase 3 | Done | Yes | Yes | Yes | Page shows transcription against proofread text. `concepts` selects stamp, signature, photograph, rectangle. Try again sends a new request. |
 | 3c | Hardening and presentation | Added after 3b | Done | Yes | Yes | Yes | Faster mask drawing, boxes clipped to the image, fenced proofread prompt, optional per-IP rate limit, model names in the response. Page: Cancel, 150 s timeout, region counts with best score, overlay PNG download. CI workflow, MIT license, README diagram and screenshot. |
+| 4 | Feature expansion F0–F8 | `Feature_Expansion_Plan.md` §13 | In Progress | Yes | Yes | Yes | F0–F7 done (share-safe copy, custom regions, extraction, demo UX and browser tests, live progress, region descriptions, ask the document). F8 and the §5.3 hardening are next. Real-photo checks wait on photos. Per-item status lives in the expansion plan's tracker. |
 
 ---
 

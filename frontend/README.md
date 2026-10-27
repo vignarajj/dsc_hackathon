@@ -22,9 +22,9 @@ pnpm dev
 
 Open http://localhost:3000. The page calls `http://127.0.0.1:8000` unless `NEXT_PUBLIC_API_BASE_URL` is set. Copy `.env.example` to `.env.local` to change it.
 
-JPEG and PNG only, up to 10 MB. A backend 413, 429, or 502 message is shown on the page. A request can take up to a minute. Cancel stops waiting and returns the page to its idle state; a model call already under way still finishes on the server. The page gives up after 180 seconds and offers Try again.
+JPEG and PNG only, up to 10 MB. A backend 413, 429, or 502 message is shown on the page. A request can take up to a minute. Cancel returns the page to its idle state and closes the progress stream, which makes the API stop the request. The page gives up after 180 seconds and offers Try again.
 
-The page lists the steps. Four region checkboxes start checked. The page sends that selection as the `concepts` field. Changing the boxes after a result does not send another request; clean again to apply it. Unchecking every region still transcribes the page and returns an overlay with no masks.
+The page lists four steps. Four region checkboxes start checked. The page sends that selection as the `concepts` field. Changing the boxes after a result does not send another request; clean again to apply it. Unchecking every region still transcribes the page and returns an overlay with no masks.
 
 Below the four region checkboxes, Find something else adds up to 3 more things for SAM to look for. Type a name and press Enter or Add, or pick a suggestion (Logo, QR code, Barcode, Face, Table, Checkbox, Seal; the ones SAM found in the F0 spike). The page checks the name the same way the API does: 1 to 3 plain words, no text prompts such as "receipt", and no repeats. Typing a preset name such as "stamp" turns that preset on. Each added region shows its color and a remove button, is sent in the `custom` field, and can be hidden in the share-safe copy. The legend under the result uses the colors the API returns, so it matches the overlay.
 
@@ -50,7 +50,7 @@ Under the text comparison in the Text tab, Ask the document sends a question to 
 
 ## Progress
 
-The page asks the API to stream its progress. While a request runs, a list under the progress bar shows each step the API planned (preparing the image, finding regions with SAM, reading the text with Muse, proofreading, and, when chosen, pulling out fields and finding personal details, then building the overlay and share-safe copy). Each step is marked waiting, in progress, or done, with a short detail such as how many of each region were found. Cancel closes the stream, and the API then stops the request instead of finishing it. An API that does not stream still works: the page reads its plain JSON answer and shows no step list.
+The page asks the API to stream its progress. While a request runs, a list under the progress bar shows each step the API planned (preparing the image, finding regions with SAM, reading the text with Muse, proofreading, and, when chosen, describing each region, pulling out fields, and finding personal details, then building the overlay and share-safe copy). Each step is marked waiting, in progress, or done, with a short detail such as how many of each region were found. Cancel closes the stream, and the API then stops the request instead of finishing it. An API that does not stream still works: the page reads its plain JSON answer and shows no step list.
 
 ## Layout
 
@@ -63,10 +63,10 @@ The result code is in `src/app/results/`: one file per tab, plus the tabs, the s
 ## Tests
 
 ```bash
-pnpm test
+pnpm test        # unit tests in src/lib/*.test.ts, with Node's test runner
 pnpm lint
 pnpm typecheck   # generates Next route types, then runs tsc
 pnpm test:e2e     # browser tests, see below
 ```
 
-`pnpm test:e2e` builds the page into `.next-e2e` against a fake API and runs Playwright on desktop and on a 375 px dark-mode phone. The fake API is `backend/tests/fake_server.py`: the real FastAPI app with a fixed model gateway, so the tests never call Meta and need no key. It starts its own servers on ports 8100 and 3100 and never reuses one that is already running. The fake API pauses one second in the proofread so the tests can see a step in progress. The tests walk a sample through every tab, check that each download produces a file, check the step list and cancelling a streamed run, and cover the tab keys, the region highlight, empty tabs, Cancel, and a blocked custom region. Install a browser once with `pnpm exec playwright install chromium`, or set `CHROMIUM_PATH` to one already installed. CI runs the same tests.
+`pnpm test:e2e` builds the page into `.next-e2e` against a fake API and runs Playwright on desktop and on a 375 px dark-mode phone. The fake API is `backend/tests/fake_server.py`: the real FastAPI app with a fixed model gateway, so the tests never call Meta and need no key. It starts its own servers on ports 8100 and 3100 and never reuses one that is already running. The fake API pauses one second in the proofread so the tests can see a step in progress. The tests walk a sample through every tab, check that each download produces a file, check the step list and cancelling a streamed run, ask the document a question, and cover region notes, the tab keys, the region highlight, empty tabs, Cancel, and a blocked custom region. Install a browser once with `pnpm exec playwright install chromium`, or set `CHROMIUM_PATH` to one already installed. CI runs the same tests.

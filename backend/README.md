@@ -1,7 +1,9 @@
 # Document screenshot cleaner API
 
-The project overview is in the root [README](../README.md). This service accepts one JPEG or PNG and returns SAM 3.1 boxes, a
-pre-rendered overlay, the Muse transcription, and a proofread copy of that text.
+The project overview is in the root [README](../README.md). This service accepts one JPEG or PNG
+and returns SAM 3.1 boxes, a pre-rendered overlay, the Muse transcription and proofread, and, on
+request, a share-safe copy, masked text, key fields, and region descriptions. It can stream its
+progress, and it answers questions about a page's text.
 
 ## Run
 
@@ -16,6 +18,7 @@ uv run uvicorn dsc_backend.main:app --reload --port 8000
 The process refuses to start when `META_API_KEY` is missing.
 
 - `GET http://127.0.0.1:8000/api/health` → `{"status":"ok"}`
+- `POST http://127.0.0.1:8000/api/ask` with a JSON question; see [Ask the document](#ask-the-document)
 - `POST http://127.0.0.1:8000/api/process` with multipart field `image`
 - Optional multipart field `concepts`, a comma-separated list. Omit it to use `SAM_CONCEPTS`.
 - Optional multipart field `custom`: up to 3 more things for SAM to find, comma-separated,
@@ -29,6 +32,8 @@ The process refuses to start when `META_API_KEY` is missing.
   fields. Default `false`.
 - Optional multipart field `describe`: `true` to add a short Muse description to each region.
   Default `false`.
+- Optional header `Accept: application/x-ndjson` to stream progress; see
+  [Live progress](#live-progress).
 
 ```bash
 curl -s -F "image=@note.png;type=image/png" http://127.0.0.1:8000/api/process
@@ -113,14 +118,19 @@ working image with no masks. That is a successful response.
 6. Draw a light colored fill and a thicker outline on larger images. Rectangle
    fills stay lighter than stamps so the page text remains readable. The upload
    page legend uses the same colors.
-7. Transcribe the whole image with `muse-spark-1.3`, then proofread that text
-   with the same model. `MUSE_TEXT_MODEL` can be set to `muse-wonder-1.0`.
-   The proofread prompt fences the transcription in `<transcript>` tags and
-   tells the model never to follow instructions inside it. A literal closing
-   tag in the text is defused, and an echoed fence is stripped from the answer.
-8. When `redact` names regions, build the share-safe copy. It is described
-   below.
-9. Each Meta call has a 60 second timeout. This service does not retry a model
+7. Transcribe the whole image with `MUSE_VISION_MODEL` (`muse-spark-1.3`), in
+   parallel with segmentation, then proofread that text with `MUSE_TEXT_MODEL`
+   (`muse-spark-1.3`; it can be `muse-wonder-1.0`). The proofread prompt fences
+   the transcription in `<transcript>` tags and tells the model never to follow
+   instructions inside it. A literal closing tag in the text is defused, and an
+   echoed fence is stripped from the answer.
+8. While the proofread runs, and only when asked, Muse also pulls out key
+   fields (`extract`) and finds personal details (`redact_text`). Region
+   descriptions (`describe`) start as soon as segmentation is done. Each has
+   its own section below.
+9. Draw the overlay, then build the share-safe copy when `redact` names
+   regions or image text is hidden, and mask the shareable text.
+10. Each Meta call has a 60 second timeout. This service does not retry a model
    call. Timeout or upstream failure is HTTP 502 with `{"detail": "..."}`.
    The upload page can send the same image again as a new request.
 
@@ -288,7 +298,10 @@ images, which is why it stays off until it is checked on real photos. This
 call adds about 15 seconds, up to about 45. A line that is not found, or a
 failed call, is a warning.
 
-CORS allows `http://localhost:3000` and `http://127.0.0.1:3000` only.
+## Limits
+
+CORS allows `CORS_ORIGINS`, which defaults to `http://localhost:3000` and
+`http://127.0.0.1:3000`.
 
 `RATE_LIMIT_PER_MINUTE` caps `/api/process` and `/api/ask` together per client IP over a sliding
 minute. It is off (`0`) by default. Over the limit is HTTP 429 with
@@ -303,6 +316,16 @@ uv run ruff check .
 uv run ruff format --check .
 ```
 
-The test suite mocks the model gateway. It does not call Meta.
+The test suite mocks the model gateway. It does not call Meta. Each module has
+its own test file (`test_redaction.py`, `test_privacy.py`, `test_extraction.py`,
+`test_describe.py`, `test_ask.py`, `test_stream.py`, and so on), and
+`test_process.py` covers the `/api/process` contract.
+
+`tests/fake_server.py` runs the real app with a fixed gateway for the browser
+tests in `frontend/e2e/`. It never calls Meta:
+
+```bash
+uv run python tests/fake_server.py 8100   # FAKE_DELAY_SECONDS slows the proofread
+```
 
 The upload page lives in `frontend/`. See `frontend/README.md`.

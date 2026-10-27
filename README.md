@@ -5,78 +5,91 @@
 
 ![The upload page](docs/screenshot.png)
 
-Upload one screenshot or photo of a page. The app marks the regions you leave on — stamps, signatures, photographs, and rectangles — transcribes the visible text, and proofreads it. You get the original picture, a colored overlay, and the cleaned text beside the transcription, with the edits marked. You can copy that text or download it as Markdown. If a read fails, you can send the same image again.
+People photograph IDs, forms, and bank slips and send them over chat every day, signatures, faces, and account numbers included. Drop the photo in. SAM 3.1 finds the signature, the photo, the stamp, or anything you name. Muse reads the page, fixes it, pulls out the fields, and spots the phone numbers and ID numbers. One click gives you a copy that is safe to share.
 
-This is a small tool for a messy real-world image: a photographed form, a handwritten note, a chat, or a phone screen. It was built for the Meta Global AI Developer Hackathon, Indie track, on the theme Build for Your World.
+It was built for the Meta Global AI Developer Hackathon, Indie track, on the theme Build for Your World.
 
 ## What you can do
 
-1. Choose or drop a JPEG or PNG up to 10 MB.
-2. Leave on the regions you want marked. All four start on.
-3. Wait while the image is read. A request can take up to a minute. Press Cancel to stop waiting. The page gives up on its own after 150 seconds. If it fails and the file is still selected, press Try again. That sends the image once more. The API does not retry a call on its own.
-4. Compare the original with the overlay. Each kind of region has its own color. Below the pictures, each region you asked for shows how many were found and the best confidence score. Download PNG saves the overlay as `<name>.overlay.png`. Changing the region boxes after a result does not send a new request until you clean again.
-5. Read the transcription beside the proofread. Struck-through words were in the transcription. Underlined words are the proofread wording. When nothing changed, the page says so. Copy the cleaned text, or download `<name>.cleaned.md`. Copy and download use the proofread text. They stay off when that text is empty.
+1. Choose or drop a JPEG or PNG up to 10 MB, or click one of the four sample pages.
+2. Choose what SAM marks: stamp, signature, photograph, rectangle, and up to 3 things you name, such as "logo" or "QR code".
+3. Choose what the share-safe copy hides (signature and photograph by default), black box or blur, and whether to mask personal details in the text. Optionally pull out the document's key fields (on by default) and describe each region in a few words (off by default).
+4. Press Clean screenshot. A step list shows each stage as it finishes. A request can take up to a minute. Cancel stops it on the server too. The page gives up after 180 seconds and offers Try again.
+5. Read the result in four tabs:
+   - **Overview**: the original and the SAM overlay under one slider. Point at a region to outline it. Download the overlay PNG.
+   - **Text**: the transcription beside the proofread, with edits marked. Copy it or download Markdown. Ask the document a question and get an answer with the exact words it came from.
+   - **Data**: the document type, a summary, and key fields, each marked when its value is not in the text. Download JSON or CSV.
+   - **Share-safe**: the hidden copy under a before/after slider, with no location or camera data, and the text with personal details replaced by `[PHONE]`, `[NAME]`, and so on.
 
-An image with no matching regions is still a success. The overlay is the picture with no masks, and the text is whatever was read from the page. If the page has no text, the screen says so and the copy and download buttons stay off.
+There is no account system, no saved history, and no multi-page document support. Nothing you upload is stored.
 
 ## What is in this repo
 
 | Path | What it is |
 |---|---|
-| `backend/` | FastAPI service. Accepts the image, calls the models, and draws the overlay. |
-| `frontend/` | Next.js page. Uploads the image and shows the result. |
-| `demo/final-demo.webm` | 67 second walkthrough of the polished page, recorded before region choices, the proofread comparison, Try again, Cancel, region counts, and overlay download. |
-| `demo/happy-path.webm` | 77 second earlier recording of the first working page. |
-| `Document_Screenshot_Cleaner_SAM_Hackathon_Plan.md` | The execution plan and phase tracker. |
+| `backend/` | FastAPI service. Checks the image, calls the models, draws the overlay and the share-safe copy, and streams progress. |
+| `backend/tests/fake_server.py` | The real API with a fixed model gateway, for browser tests. Never calls Meta. |
+| `frontend/` | Next.js page. Uploads the image and shows the result in tabs. |
+| `frontend/public/samples/` | Four sample pages made for this app. Names are invented; phone numbers are from reserved drama ranges. |
+| `frontend/e2e/` | Playwright tests of the built page against the fake API. |
+| `Document_Screenshot_Cleaner_SAM_Hackathon_Plan.md` | The original plan, phase tracker, and the F0 spike results (§5.1). |
+| `Feature_Expansion_Plan.md` | The feature expansion plan and its status tracker (§13). |
+| `demo/final-demo.webm`, `demo/happy-path.webm` | Earlier recordings, made before the feature expansion. |
 | `docs/screenshot.png` | The upload page, shown at the top of this file. |
-| `.github/workflows/ci.yml` | Runs the backend and frontend checks on every push and pull request. |
-
-There is no account system, no saved history, and no multi-page document support.
+| `.github/workflows/ci.yml` | Backend, frontend, and browser checks on every push and pull request. |
 
 ## How one upload is handled
 
 ```mermaid
 flowchart LR
-    B[Browser] -- "POST /api/process" --> A[FastAPI]
-    A --> P[EXIF fix and 2048 px cap]
-    P --> S1[SAM 3.1: stamp]
-    P --> S2[SAM 3.1: signature]
-    P --> S3[SAM 3.1: photograph]
-    P --> S4[SAM 3.1: rectangle]
-    P --> T[Muse: transcribe]
-    T --> R[Muse: proofread]
-    S1 & S2 & S3 & S4 --> O[Overlay PNG]
-    O & R --> J[JSON response]
-    J --> B
+    B[Browser] -- "POST /api/process" --> C[Check upload, EXIF fix, 2048 px cap]
+    C --> S[SAM 3.1: one call per region name]
+    C --> G[Muse: signature boxes]
+    C --> T[Muse: transcribe]
+    S & G --> D[Muse: describe each region]
+    T --> P[Muse: proofread]
+    T --> E[Muse: key fields]
+    T --> N[Muse: personal details]
+    S & G & D --> O[Overlay and share-safe image]
+    P & E & N --> M[Mask the shareable text]
+    O & M --> R[JSON result, or a stream of progress lines]
+    R --> B
 ```
 
-The browser sends the file to `POST /api/process`. The API does not trust the browser to draw masks.
+1. The upload must be a JPEG or PNG up to 10 MB, or the API answers 400 or 413 before calling any model. EXIF orientation is applied and the long edge is capped at 2048 px; every model and both images use that working image, so boxes line up with the picture.
+2. SAM 3.1 is called once per region name, in parallel. When signature is marked, Muse vision also boxes signatures, because SAM found none in the F0 spike. Muse transcribes the whole page at the same time.
+3. With the transcription in hand, Muse proofreads it and, when asked, pulls out key fields and finds personal details, all in parallel. Region descriptions start as soon as SAM is done.
+4. The API draws the overlay, builds the share-safe image (hidden areas follow each SAM mask; the file has no metadata), and masks the shareable text.
+5. Every prompt that carries text from the image fences it and tells the model never to follow instructions inside it. Model output that has to be in the text (sensitive spans, quotes, field values) is checked against the text.
+6. Each model call has a 60 second timeout and is not retried. A failed core step (segmentation, transcription, proofread) is HTTP 502. A failed optional step (signature boxes, fields, personal details, descriptions, text boxes) leaves its part empty and adds a line to `warnings`; the request still succeeds.
 
-1. It accepts only JPEG or PNG, up to 10 MB. Anything else is HTTP 400. A larger file is HTTP 413.
-2. It applies EXIF orientation, then shrinks the long edge to 2048 px when needed. Segmentation, transcription, and the overlay all use that same working image, so the boxes line up with the picture on the page.
-3. It asks SAM 3.1, in parallel, for the regions in the `concepts` form field. The known names are `stamp`, `signature`, `photograph`, and `rectangle`, always stored in that order. Omit the field and the server uses `SAM_CONCEPTS`, which defaults to all four. Send the field empty and segmentation is skipped, while transcription still runs. An unknown name is HTTP 400. Prompts for text, a document, or a handwritten note are not sent. Those returned no regions in the early spike. Text comes from a full-image transcription, not from the regions.
-4. It decodes each SAM stream with `meta-sam-parser` and paints the mask at the box. A box whose mask cannot be decoded is still outlined. Rectangle fills are lighter than stamps so the words underneath stay readable. Returned boxes are clipped to the working image, and a box entirely off it is dropped.
-5. It transcribes the whole image with Muse Spark (`muse-spark-1.3`), then proofreads that text with the same model. The transcription is wrapped in `<transcript>` tags and marked as data, so text in the picture that reads like an instruction does not steer the proofread. An empty transcription is not proofread.
-6. Each model call has a 60 second timeout and is not retried by the API. A timeout or an upstream failure is HTTP 502 with a short `detail` string, and the page shows that string. Try again starts a new request with the same file and the regions currently checked.
+`backend/README.md` has every form field, the full response, the stream format, and `POST /api/ask`.
 
-The response looks like this:
+## How Meta models are used
 
-```json
-{
-  "boxes": [{ "x": 0, "y": 0, "w": 100, "h": 50, "label": "stamp", "score": 0.97 }],
-  "overlay_png_base64": "<png with the masks drawn on the working image>",
-  "original_text": "<transcription>",
-  "cleaned_text": "<proofread text>",
-  "models": { "segmentation": "sam-3.1", "transcription": "muse-spark-1.3", "proofread": "muse-spark-1.3" }
-}
-```
+| Model | Used for |
+|---|---|
+| SAM 3.1 (`sam-3.1`) | Segmenting stamps, photos, rectangles, and the regions you name. Its masks shape the overlay and the share-safe hiding. |
+| Muse Spark (`muse-spark-1.3`) | Transcribing the page, proofreading it, boxing signatures, extracting key fields, finding personal details, describing regions, and answering questions. |
+| Muse Wonder (`muse-wonder-1.0`) | Locating sensitive words inside the picture, only when `REDACT_IMAGE_TEXT=true`. |
+| `meta-sam-parser` | Decoding SAM's streamed boxes and masks. |
 
-`score` is the model's confidence when it sends one, otherwise `null`. `models` names the models this server is configured to use, and the page prints them under the result. `GET /api/health` returns `{ "status": "ok" }`.
+### Model calls per request
+
+With the page's default choices (four regions, fields on, personal details on, descriptions off), one image costs 9 calls: 4 SAM, 1 signature lookup, 1 transcription, 1 proofread, 1 extraction, and 1 personal-details check. The most one request can make is 22: 7 SAM (4 presets and 3 custom), 1 signature lookup, 1 transcription, 1 proofread, 2 extraction (with one repair), 1 personal-details check, 8 descriptions, and 1 text-box lookup. Each question in Ask the document is 1 more call.
+
+## Privacy
+
+- Nothing is kept after a request: the upload, its text, and the results are not saved. Logs hold only region names, counts, the length of the text, and error types, never the text or the image.
+- The share-safe image is re-encoded from raw pixels, so EXIF, GPS, and other metadata from the upload never reach it.
+- Black box is the safer choice; blur can leave shapes readable.
+- By default, text inside the share-safe image is not hidden, and the page says so; share the masked text instead. `REDACT_IMAGE_TEXT=true` also blacks out sensitive words in the image, and stays off until it is checked on real photos.
+- Region descriptions never name or guess who a person is.
 
 ## Requirements
 
 - Python 3.14 and [uv](https://docs.astral.sh/uv/)
-- Node.js and pnpm 11
+- Node.js 24 and pnpm 11
 - A Meta Model API key
 
 The key belongs in `backend/.env` only. That file is gitignored.
@@ -107,7 +120,7 @@ Check the API on its own:
 
 ```bash
 curl -s http://127.0.0.1:8000/api/health
-curl -s -F "image=@note.png;type=image/png" http://127.0.0.1:8000/api/process
+curl -s -F "image=@note.png;type=image/png" -F "redact=signature" -F "extract=true" http://127.0.0.1:8000/api/process
 ```
 
 ## Configuration
@@ -118,8 +131,8 @@ Optional values in `backend/.env`:
 |---|---|
 | `META_BASE_URL` | `https://api.meta.ai/v1` |
 | `SAM_MODEL` | `sam-3.1` |
-| `MUSE_VISION_MODEL` | `muse-spark-1.3` |
-| `MUSE_TEXT_MODEL` | `muse-spark-1.3` |
+| `MUSE_VISION_MODEL` | `muse-spark-1.3` (transcription and region descriptions) |
+| `MUSE_TEXT_MODEL` | `muse-spark-1.3` (proofread, fields, personal details, and answers). Can be `muse-wonder-1.0`. |
 | `MUSE_SIGNATURE_MODEL` | `muse-spark-1.3` (boxes signatures, which SAM does not find) |
 | `REDACT_IMAGE_TEXT` | `false`. `true` also blacks out sensitive text inside the share-safe image. |
 | `MUSE_TEXT_BOX_MODEL` | `muse-wonder-1.0` (finds that text in the picture) |
@@ -128,30 +141,29 @@ Optional values in `backend/.env`:
 | `UPSTREAM_TIMEOUT_SECONDS` | `60` |
 | `RATE_LIMIT_PER_MINUTE` | `0` (off). Requests per minute per client IP for `/api/process` and `/api/ask` together. Over the limit is HTTP 429. |
 
-`MUSE_TEXT_MODEL` can be set to `muse-wonder-1.0` for the proofread step. The vision step stays on Muse Spark.
-
 ## Checks
 
 ```bash
 cd backend && uv run pytest && uv run ruff check . && uv run ruff format --check .
 cd frontend && pnpm test && pnpm lint && pnpm typecheck && pnpm build
+cd frontend && pnpm test:e2e   # browser tests against the fake API
 ```
 
-GitHub Actions runs the same commands on every push and pull request.
+GitHub Actions runs all three on every push and pull request.
 
-Backend tests use a stand-in model client, so they do not spend API credit. The frontend tests cover file checks, error messages, and the Markdown filename. A browser pass of the running app is separate and needs the key.
+None of these call Meta or need a key. The backend tests use a stand-in model gateway. The frontend unit tests cover the API client, the stream reader, exports, and validation. The browser tests run the built page against `backend/tests/fake_server.py` on desktop and on a 375 px dark-mode phone; see `frontend/README.md`. A pass against the real API needs the key and is a separate step.
 
 ## Hosting
 
 Nothing in this repo is deployed. Both processes are meant to run on your machine.
 
-A public test needs the API and the page on hosts that can hold a request for about a minute. Put `META_API_KEY` in the API host's environment, not in git. Set `CORS_ORIGINS` to the page's origin, and set `NEXT_PUBLIC_API_BASE_URL` to the API's public URL. The API has no login. Anyone who can reach a public copy can spend the Meta key. Set `RATE_LIMIT_PER_MINUTE` (for example `5`) on a public copy. The limit is kept in memory for one process. Behind a proxy, start uvicorn with `--proxy-headers --forwarded-allow-ips=<proxy IP>` so the limit sees each visitor's address instead of the proxy's. Take the URL down when judging is over.
+A public test needs the API and the page on hosts that can hold a request for up to three minutes and pass a streamed response through without buffering it. Put `META_API_KEY` in the API host's environment, not in git. Set `CORS_ORIGINS` to the page's origin, and set `NEXT_PUBLIC_API_BASE_URL` to the API's public URL at build time. The API has no login. Anyone who can reach a public copy can spend the Meta key. Set `RATE_LIMIT_PER_MINUTE` (for example `5`) on a public copy, and a spend alert on the key. The limit is kept in memory for one process. Behind a proxy, start uvicorn with `--proxy-headers --forwarded-allow-ips=<proxy IP>` so the limit sees each visitor's address instead of the proxy's. Take the URL down when judging is over.
 
 ## More detail
 
-- `backend/README.md` — request rules and the pipeline
-- `frontend/README.md` — the upload page
-- `Document_Screenshot_Cleaner_SAM_Hackathon_Plan.md` — scope and phase status
+- `backend/README.md`: form fields, the response, the stream, `/api/ask`, and every pipeline rule
+- `frontend/README.md`: the page, its tabs, and the browser tests
+- `Feature_Expansion_Plan.md` §13: what is done and what is left
 
 ## License
 
