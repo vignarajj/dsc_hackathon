@@ -38,6 +38,7 @@ There is no account system, no saved history, and no multi-page document support
 | `demo/final-demo.webm`, `demo/happy-path.webm` | Earlier recordings, made before the feature expansion. |
 | `docs/screenshot.png` | The upload page, shown at the top of this file. |
 | `docs/DEPLOY.md` | How to deploy a public copy, and the checks to run first. |
+| `docs/LAUNCH.md` | What is left before submission, with a status tracker. |
 | `backend/Dockerfile`, `render.yaml`, `frontend/vercel.json` | The API image, the Render blueprint for it, and the Vercel settings for the page. |
 | `.github/workflows/ci.yml` | Backend, frontend, and browser checks on every push and pull request. |
 
@@ -172,7 +173,8 @@ A public test needs the API and the page on hosts that can hold a request for up
 
 - `backend/README.md`: form fields, the response, the stream, `/api/ask`, and every pipeline rule
 - `frontend/README.md`: the page, its tabs, and the browser tests
-- `Feature_Expansion_Plan.md` §13: what is done and what is left
+- `Feature_Expansion_Plan.md` §13: what was built, item by item
+- `docs/LAUNCH.md`: what is left before submission
 
 ## License
 

@@ -382,6 +382,10 @@ All request fields are optional with today's defaults; all response fields are a
 
 ## 13. Status tracker
 
+The work after feature-complete (live checks, deploy, demo, submission) is
+tracked in `docs/LAUNCH.md`. The rows below from L1 on are kept here for
+history; their current status lives there.
+
 Update this table in every commit that changes a row. `Status` is one of
 `Not Started`, `In Progress`, `Done`, or `Blocked` (with the blocker named).
 `Tests`, `Docs`, and `Commit` turn `Yes` when the work delivers them. Every
@@ -413,3 +417,4 @@ otherwise; checks on real photos are tracked as their own rows.
 | R1b | Deploy, rate limit, spend alert, streaming through the host | §8 | Not Started | No | No | No | Needs Render and Vercel accounts and the key; follow `docs/DEPLOY.md`. |
 | R2 | Demo video and final README | §9, §12 | Not Started | No | No | No | |
 | R3 | Repo public, submit on the portal | §12 | Not Started | No | No | No | Target 3 Nov. |
+| M1 | Merge into `main` | — | Done | Yes | Yes | Yes | vignarajj/dsc_hackathon#1, rebase-merged; `main` at `07a4401`. All CI jobs green, e2e for the first time on GitHub. |
