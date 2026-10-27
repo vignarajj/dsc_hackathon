@@ -130,7 +130,8 @@ working image with no masks. That is a successful response.
    its own section below.
 9. Draw the overlay, then build the share-safe copy when `redact` names
    regions or image text is hidden, and mask the shareable text.
-10. Each Meta call has a 60 second timeout. This service does not retry a model
+10. Each Meta call has a 60 second timeout, and the optional steps share one
+    deadline (see [Time limit](#time-limit)). This service does not retry a model
    call. Timeout or upstream failure is HTTP 502 with `{"detail": "..."}`.
    The upload page can send the same image again as a new request.
 
@@ -297,6 +298,18 @@ with `blur`. The F0 spike covered 24 of 24 words this way on generated
 images, which is why it stays off until it is checked on real photos. This
 call adds about 15 seconds, up to about 45. A line that is not found, or a
 failed call, is a warning.
+
+## Time limit
+
+`REQUEST_BUDGET_SECONDS` (default 150) is one deadline for all the optional
+steps of a request: the Muse signature lookup, region descriptions, key
+fields, personal details, and the text-box lookup. A step still running at the
+deadline is cancelled and named in `warnings`, for example "Pulling out key
+fields ran past the 150 second limit and was skipped.", and the request still
+succeeds. When personal details are skipped this way, the fixed patterns
+still mask the text. Core steps (segmentation, transcription, and the
+proofread) are never cut; they keep the 60 second limit per model call. The
+page waits 180 seconds, which leaves room for the transfer.
 
 ## Limits
 

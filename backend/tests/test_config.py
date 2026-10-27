@@ -35,3 +35,14 @@ def test_image_text_redaction_flag(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     monkeypatch.setenv("REDACT_IMAGE_TEXT", "sometimes")
     with pytest.raises(RuntimeError):
         load_settings(tmp_path / "none.env")
+
+
+def test_request_budget_setting(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("META_API_KEY", "k")
+    monkeypatch.delenv("REQUEST_BUDGET_SECONDS", raising=False)
+    assert load_settings(tmp_path / "none.env").request_budget_seconds == 150.0
+    monkeypatch.setenv("REQUEST_BUDGET_SECONDS", "90")
+    assert load_settings(tmp_path / "none.env").request_budget_seconds == 90.0
+    monkeypatch.setenv("REQUEST_BUDGET_SECONDS", "0")
+    with pytest.raises(RuntimeError, match="positive"):
+        load_settings(tmp_path / "none.env")

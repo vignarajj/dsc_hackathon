@@ -1,7 +1,7 @@
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
-// The API can spend 60 s on segmentation and transcription, 60 s on the
-// proofread, and 60 s finding sensitive text in the picture when that is on.
+// The API stops its optional steps at a 150 s budget; the extra 30 s is for
+// the core steps to finish and the result to arrive.
 export const REQUEST_TIMEOUT_MS = 180_000;
 
 export type ProcessBox = {

@@ -61,7 +61,7 @@ flowchart LR
 3. With the transcription in hand, Muse proofreads it and, when asked, pulls out key fields and finds personal details, all in parallel. Region descriptions start as soon as SAM is done.
 4. The API draws the overlay, builds the share-safe image (hidden areas follow each SAM mask; the file has no metadata), and masks the shareable text.
 5. Every prompt that carries text from the image fences it and tells the model never to follow instructions inside it. Model output that has to be in the text (sensitive spans, quotes, field values) is checked against the text.
-6. Each model call has a 60 second timeout and is not retried. A failed core step (segmentation, transcription, proofread) is HTTP 502. A failed optional step (signature boxes, fields, personal details, descriptions, text boxes) leaves its part empty and adds a line to `warnings`; the request still succeeds.
+6. Each model call has a 60 second timeout and is not retried, and the optional steps share a 150 second budget; one still running then is skipped with a warning. A failed core step (segmentation, transcription, proofread) is HTTP 502. A failed optional step (signature boxes, fields, personal details, descriptions, text boxes) leaves its part empty and adds a line to `warnings`; the request still succeeds.
 
 `backend/README.md` has every form field, the full response, the stream format, and `POST /api/ask`.
 
@@ -138,7 +138,8 @@ Optional values in `backend/.env`:
 | `MUSE_TEXT_BOX_MODEL` | `muse-wonder-1.0` (finds that text in the picture) |
 | `SAM_CONCEPTS` | `stamp,signature,photograph,rectangle` (used when the request omits `concepts`) |
 | `CORS_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` |
-| `UPSTREAM_TIMEOUT_SECONDS` | `60` |
+| `UPSTREAM_TIMEOUT_SECONDS` | `60` (per model call) |
+| `REQUEST_BUDGET_SECONDS` | `150`. One deadline for the optional steps; a step still running is skipped with a warning. |
 | `RATE_LIMIT_PER_MINUTE` | `0` (off). Requests per minute per client IP for `/api/process` and `/api/ask` together. Over the limit is HTTP 429. |
 
 ## Checks
