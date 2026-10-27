@@ -377,3 +377,38 @@ All request fields are optional with today's defaults; all response fields are a
 - [ ] New demo video (60–90 s) in `demo/` and linked
 - [ ] README: pitch, screenshot/GIF of the share-safe slider, "How Meta models are used" table, architecture diagram, privacy statement, call-count/cost note
 - [ ] Repo public, About section set, submitted on the portal by 3 Nov
+
+---
+
+## 13. Status tracker
+
+Update this table in every commit that changes a row. `Status` is one of
+`Not Started`, `In Progress`, `Done`, or `Blocked` (with the blocker named).
+`Tests`, `Docs`, and `Commit` turn `Yes` when the work delivers them. Every
+row below was built and checked without live Meta calls unless its notes say
+otherwise; checks on real photos are tracked as their own rows.
+
+| ID | Work item | Ref | Status | Tests | Docs | Commit | Notes |
+|----|-----------|-----|--------|-------|------|--------|-------|
+| F0 | Live API spike | §3 | Done | No | Yes | Yes | `8ceaef4`. About 250 live calls on 8 generated documents; results and decisions in the main plan §5.1. Scripts stay out of the repo, as planned. |
+| F1a | Share-safe image: mask-shaped hiding, no metadata | §4 F1 | Done | Yes | Yes | Yes | `f57144b`. SAM found no signatures in F0, so Muse vision boxes them. `photograph` is sent to SAM as `photo`. |
+| F1b | Sensitive text: patterns, Muse spans, masking | §4 F1 | Done | Yes | Yes | Yes | `f6162f9`. Verbatim check drops invented spans. Surnames and sort codes added after the live run. |
+| F1c | Black out sensitive text in the image | §4 F1 | Done | Yes | Yes | Yes | `52d86a8`. Behind `REDACT_IMAGE_TEXT`, off until checked on real photos. |
+| F1 UI | Share-safe panel, slider, downloads | §4 F1 | Done | Yes | Yes | Yes | `5f8df1e`. |
+| F2 | Custom region prompts | §4 F2 | Done | Yes | Yes | Yes | `c6a3633`. Up to 3 names, blocklist from F0, palette in the response. |
+| F3 | Structured extraction, JSON and CSV export | §4 F3 | Done | Yes | Yes | Yes | `ad12bc4`. Strict schema, one repair prompt, grounding check, CSV formula defusing. |
+| F6 | Demo UX: tabs, slider, highlight, samples, E2E | §4 F6, §6 | Done | Yes | Yes | Yes | `2f69deb`. Playwright against a fake gateway, desktop and 375 px dark; CI job added, not yet run on GitHub. |
+| F4 | Live progress (NDJSON stream) | §4 F4 | Done | Yes | Yes | Yes | `f1749f7`. Disconnect cancels the work. The 5 s fallback to a plain request was left out on purpose: it would send the request twice. |
+| F5 | Region descriptions | §4 F5 | Done | Yes | Yes | Yes | `a23ae58`. Off by default on the page to save calls; the plan had it on. |
+| F7 | Ask the document | §4 F7 | Done | Yes | Yes | Yes | `1ba571f`. `POST /api/ask`, verbatim quotes only, shared rate limit. |
+| D1 | READMEs and docs match the code, status tracker | §12 | Done | No | Yes | Yes | Root README rewritten; backend and frontend READMEs corrected; screenshot retaken. |
+| F8 | Read aloud | §4 F8 | Not Started | No | No | No | |
+| H1 | Overall request budget (`REQUEST_BUDGET_SECONDS`) | §5.3 | Not Started | No | No | No | |
+| H2 | Server-side feature flags | §5.3 | Not Started | No | No | No | `FEATURE_EXTRACT`, `FEATURE_DESCRIBE`, `FEATURE_PRIVACY`; image text keeps `REDACT_IMAGE_TEXT`. |
+| H3 | Live smoke script (`backend/scripts/smoke.py`) | §6 | Not Started | No | No | No | Written without calls; running it spends calls. |
+| H4 | Prompts in one `prompts.py` | §5.6 | Not Started | No | No | No | Optional tidy-up. Prompts live in `meta.py` today. |
+| L1 | Acceptance checks on real photos (F1, F2, F3) | §4 | Blocked | No | No | No | Needs 2 to 3 real phone photos and live calls. Also settles signature boxes and F1c. |
+| L2 | Evaluation sheet | §6 | Not Started | No | No | No | Needs live calls; numbers go in the README. |
+| R1 | Deploy, rate limit, spend alert, streaming through the host | §8 | Not Started | No | No | No | Needs host accounts. |
+| R2 | Demo video and final README | §9, §12 | Not Started | No | No | No | |
+| R3 | Repo public, submit on the portal | §12 | Not Started | No | No | No | Target 3 Nov. |

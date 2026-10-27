@@ -236,7 +236,7 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
   }
 
   function cancelClean() {
-    // The page stops waiting. A model call already under way still finishes on the server.
+    // Aborting closes the progress stream, and the API then cancels the request.
     inFlight.current?.abort();
   }
 
