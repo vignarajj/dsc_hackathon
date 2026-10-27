@@ -135,6 +135,7 @@ Optional values in `backend/.env`:
 | `MUSE_TEXT_MODEL` | `muse-spark-1.3` (proofread, fields, personal details, and answers). Can be `muse-wonder-1.0`. |
 | `MUSE_SIGNATURE_MODEL` | `muse-spark-1.3` (boxes signatures, which SAM does not find) |
 | `REDACT_IMAGE_TEXT` | `false`. `true` also blacks out sensitive text inside the share-safe image. |
+| `FEATURE_EXTRACT`, `FEATURE_DESCRIBE`, `FEATURE_PRIVACY` | `true`. `false` turns off key fields, region descriptions, or the Muse personal-details check on this server, to cap calls on a public copy. |
 | `MUSE_TEXT_BOX_MODEL` | `muse-wonder-1.0` (finds that text in the picture) |
 | `SAM_CONCEPTS` | `stamp,signature,photograph,rectangle` (used when the request omits `concepts`) |
 | `CORS_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` |
@@ -158,7 +159,7 @@ None of these call Meta or need a key. The backend tests use a stand-in model ga
 
 Nothing in this repo is deployed. Both processes are meant to run on your machine.
 
-A public test needs the API and the page on hosts that can hold a request for up to three minutes and pass a streamed response through without buffering it. Put `META_API_KEY` in the API host's environment, not in git. Set `CORS_ORIGINS` to the page's origin, and set `NEXT_PUBLIC_API_BASE_URL` to the API's public URL at build time. The API has no login. Anyone who can reach a public copy can spend the Meta key. Set `RATE_LIMIT_PER_MINUTE` (for example `5`) on a public copy, and a spend alert on the key. The limit is kept in memory for one process. Behind a proxy, start uvicorn with `--proxy-headers --forwarded-allow-ips=<proxy IP>` so the limit sees each visitor's address instead of the proxy's. Take the URL down when judging is over.
+A public test needs the API and the page on hosts that can hold a request for up to three minutes and pass a streamed response through without buffering it. Put `META_API_KEY` in the API host's environment, not in git. Set `CORS_ORIGINS` to the page's origin, and set `NEXT_PUBLIC_API_BASE_URL` to the API's public URL at build time. The API has no login. Anyone who can reach a public copy can spend the Meta key. Set `RATE_LIMIT_PER_MINUTE` (for example `5`) on a public copy, and a spend alert on the key. To cap the calls further, turn off `FEATURE_DESCRIBE` (up to 8 calls per image) or the other feature switches. The limit is kept in memory for one process. Behind a proxy, start uvicorn with `--proxy-headers --forwarded-allow-ips=<proxy IP>` so the limit sees each visitor's address instead of the proxy's. Take the URL down when judging is over.
 
 ## More detail
 

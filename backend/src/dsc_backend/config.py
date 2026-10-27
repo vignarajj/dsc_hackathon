@@ -20,6 +20,10 @@ class Settings:
     muse_signature_model: str = "muse-spark-1.3"
     muse_text_box_model: str = "muse-wonder-1.0"
     redact_image_text: bool = False
+    # Optional Muse features. Turn one off to cap the calls a public copy can make.
+    feature_extract: bool = True
+    feature_describe: bool = True
+    feature_privacy: bool = True
     cors_origins: tuple[str, ...] = DEFAULT_ORIGINS
     sam_concepts: tuple[str, ...] = DEFAULT_CONCEPTS
     max_upload_bytes: int = MAX_UPLOAD_BYTES
@@ -48,6 +52,9 @@ def load_settings(env_file: Path | None = None) -> Settings:
         muse_signature_model=_text("MUSE_SIGNATURE_MODEL", "muse-spark-1.3"),
         muse_text_box_model=_text("MUSE_TEXT_BOX_MODEL", "muse-wonder-1.0"),
         redact_image_text=_flag("REDACT_IMAGE_TEXT", False),
+        feature_extract=_flag("FEATURE_EXTRACT", True),
+        feature_describe=_flag("FEATURE_DESCRIBE", True),
+        feature_privacy=_flag("FEATURE_PRIVACY", True),
         cors_origins=_csv("CORS_ORIGINS", DEFAULT_ORIGINS),
         sam_concepts=_csv("SAM_CONCEPTS", DEFAULT_CONCEPTS),
         max_upload_bytes=MAX_UPLOAD_BYTES,

@@ -18,6 +18,8 @@ uv run uvicorn dsc_backend.main:app --reload --port 8000
 The process refuses to start when `META_API_KEY` is missing.
 
 - `GET http://127.0.0.1:8000/api/health` → `{"status":"ok"}`
+- `GET http://127.0.0.1:8000/api/config` → which optional features this server runs; see
+  [Feature switches](#feature-switches)
 - `POST http://127.0.0.1:8000/api/ask` with a JSON question; see [Ask the document](#ask-the-document)
 - `POST http://127.0.0.1:8000/api/process` with multipart field `image`
 - Optional multipart field `concepts`, a comma-separated list. Omit it to use `SAM_CONCEPTS`.
@@ -298,6 +300,25 @@ with `blur`. The F0 spike covered 24 of 24 words this way on generated
 images, which is why it stays off until it is checked on real photos. This
 call adds about 15 seconds, up to about 45. A line that is not found, or a
 failed call, is a warning.
+
+## Feature switches
+
+Three optional Muse features can be turned off on the server, to cap the calls
+a public copy can make: `FEATURE_EXTRACT` (key fields), `FEATURE_DESCRIBE`
+(region descriptions), and `FEATURE_PRIVACY` (the Muse check for personal
+details). All three default to `true`. A request that asks for a feature that
+is off still succeeds: the feature is skipped, no model call is made, and a
+warning says it is turned off on this server. With `FEATURE_PRIVACY=false`,
+`redact_text=true` still masks the text using the fixed patterns. Text inside
+the picture keeps its own switch, `REDACT_IMAGE_TEXT`, which is off by
+default.
+
+`GET /api/config` tells the page which of these run, so it can say so before
+anything is sent:
+
+```json
+{ "features": { "extract": true, "describe": true, "privacy": true, "image_text": false } }
+```
 
 ## Time limit
 
