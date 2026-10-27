@@ -409,6 +409,7 @@ otherwise; checks on real photos are tracked as their own rows.
 | H4 | Prompts in one `prompts.py` | §5.6 | Not Started | No | No | No | Optional tidy-up. Prompts live in `meta.py` today. |
 | L1 | Acceptance checks on real photos (F1, F2, F3) | §4 | Blocked | No | No | No | Needs 2 to 3 real phone photos and live calls. Also settles signature boxes and F1c. |
 | L2 | Evaluation sheet | §6 | Not Started | No | No | No | Needs live calls; `smoke.py` prints most of it. Numbers go in the README. |
-| R1 | Deploy, rate limit, spend alert, streaming through the host | §8 | Not Started | No | No | No | Needs host accounts. |
+| R1a | Deploy configs: `backend/Dockerfile`, `render.yaml`, `frontend/vercel.json`, `docs/DEPLOY.md` | §8 | Done | No | Yes | Yes | The image's install and start commands were run outside a container (no base image could be pulled here), and the container was not built. `FORWARDED_ALLOW_IPS` trusts private ranges only; `*` would let visitors skip the rate limit. |
+| R1b | Deploy, rate limit, spend alert, streaming through the host | §8 | Not Started | No | No | No | Needs Render and Vercel accounts and the key; follow `docs/DEPLOY.md`. |
 | R2 | Demo video and final README | §9, §12 | Not Started | No | No | No | |
 | R3 | Repo public, submit on the portal | §12 | Not Started | No | No | No | Target 3 Nov. |
