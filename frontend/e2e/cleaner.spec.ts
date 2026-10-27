@@ -169,6 +169,32 @@ test("read aloud is hidden where the browser cannot speak", async ({ page }) => 
   await expect(text.getByRole("button", { name: "Read aloud" })).toHaveCount(0);
 });
 
+test("options the server has turned off are marked and not sent", async ({ page }) => {
+  await page.route("**/api/config", (route) =>
+    route.fulfill({
+      json: { features: { extract: false, describe: false, privacy: false, image_text: false } },
+    }),
+  );
+  let sent: { extract?: string; describe?: string } = {};
+  page.on("request", (request) => {
+    if (request.url().endsWith("/api/process")) {
+      const body = request.postData() ?? "";
+      const field = (name: string) => body.match(new RegExp(`name="${name}"\\r\\n\\r\\n([^\\r]*)`))?.[1];
+      sent = { extract: field("extract"), describe: field("describe") };
+    }
+  });
+  await page.goto("/");
+  const extract = page.getByRole("checkbox", { name: /Pull out the document type/ });
+  await expect(extract).toBeDisabled();
+  await expect(extract).not.toBeChecked();
+  await expect(page.getByRole("checkbox", { name: /Describe each region/ })).toBeDisabled();
+  await expect(page.getByText("(this server masks phone numbers, emails, and account numbers only)")).toBeVisible();
+  await page.getByRole("button", { name: /Signed form with a photo/ }).click();
+  await page.getByRole("button", { name: "Clean screenshot" }).click();
+  await expect(page.getByRole("tablist", { name: "Result" })).toBeVisible();
+  expect(sent).toEqual({ extract: "false", describe: "false" });
+});
+
 test("tabs follow the arrow, Home, and End keys", async ({ page }) => {
   await cleanSample(page);
   const overview = page.getByRole("tab", { name: "Overview" });

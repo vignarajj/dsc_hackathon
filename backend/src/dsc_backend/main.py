@@ -107,6 +107,19 @@ def create_app(
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.get("/api/config")
+    def config(request: Request) -> dict[str, dict[str, bool]]:
+        """Which optional features this server runs, so the page can say so up front."""
+        current: Settings = request.app.state.settings
+        return {
+            "features": {
+                "extract": current.feature_extract,
+                "describe": current.feature_describe,
+                "privacy": current.feature_privacy,
+                "image_text": current.redact_image_text,
+            }
+        }
+
     @app.post("/api/ask", response_model=AnswerModel)
     async def ask(request: Request) -> Answer:
         """Answer a question from the document text the page already has. No image is sent."""

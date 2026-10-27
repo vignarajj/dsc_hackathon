@@ -77,6 +77,18 @@ async def process_image(
     hide = redaction or Redaction()
     width, height = prepared.image.size
     warnings: list[str] = []
+    if extract and not settings.feature_extract:
+        extract = False
+        warnings.append("Key fields are turned off on this server.")
+    if describe and not settings.feature_describe:
+        describe = False
+        warnings.append("Region descriptions are turned off on this server.")
+    muse_privacy = hide.text and settings.feature_privacy
+    if hide.text and not muse_privacy:
+        warnings.append(
+            "The Muse check for personal details is turned off on this server, so only "
+            "phone numbers, emails, and account numbers are masked."
+        )
     budget = Budget(settings.request_budget_seconds)
     progress = Progress(emit)
     await progress.plan(
@@ -150,7 +162,7 @@ async def process_image(
                     progress.run(
                         "privacy",
                         budget.optional(gateway.sensitive_spans(original_text), _PRIVACY)
-                        if original_text
+                        if original_text and muse_privacy
                         else _nothing([]),
                     )
                 )

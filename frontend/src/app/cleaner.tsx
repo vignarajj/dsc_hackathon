@@ -18,6 +18,7 @@ import {
   validateImageFile,
 } from "@/lib/process-client";
 import { SAMPLES, type SampleId, loadSample, sampleThumbUrl } from "@/lib/samples";
+import { DEFAULT_FEATURES, fetchFeatures, type ServerFeatures } from "@/lib/server-features";
 
 import { ProgressList } from "./progress-list";
 import { DataTab } from "./results/data-tab";
@@ -81,6 +82,7 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
   const [runs, setRuns] = useState(0);
   const [appliedExtract, setAppliedExtract] = useState(false);
   const [stages, setStages] = useState<StageState[]>([]);
+  const [features, setFeatures] = useState<ServerFeatures>(DEFAULT_FEATURES);
   const [result, setResult] = useState<ProcessResponse | null>(null);
   const [dragging, setDragging] = useState(false);
   const [regions, setRegions] = useState<Record<RegionId, boolean>>(ALL_REGIONS);
@@ -99,6 +101,16 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
   useEffect(() => () => inFlight.current?.abort(), []);
 
   useEffect(() => {
+    const controller = new AbortController();
+    void fetchFeatures(apiBase, fetch, controller.signal).then((found) => {
+      if (!controller.signal.aborted) {
+        setFeatures(found);
+      }
+    });
+    return () => controller.abort();
+  }, [apiBase]);
+
+  useEffect(() => {
     return () => {
       if (previewUrl) {
         URL.revokeObjectURL(previewUrl);
@@ -115,8 +127,9 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
     redact: redactField(hidden, selected, custom),
     style,
     text: hideText,
-    extract,
-    describe,
+    // A feature the server has turned off is not asked for, so no warning comes back.
+    extract: extract && features.extract,
+    describe: describe && features.describe,
   };
   const selectionChanged = result !== null && appliedKey !== choicesKey(choices);
 
@@ -502,6 +515,11 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
               className="accent-stamp"
             />
             Also hide phone numbers, emails, names, and ID numbers in the text
+            {features.privacy ? null : (
+              <span className="text-xs text-muted">
+                (this server masks phone numbers, emails, and account numbers only)
+              </span>
+            )}
           </label>
           <p className="text-xs text-muted">
             Only marked regions can be hidden. Black is safer than blur.
@@ -510,23 +528,28 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
-            checked={extract}
-            disabled={status === "loading"}
+            checked={extract && features.extract}
+            disabled={status === "loading" || !features.extract}
             onChange={() => setExtract((current) => !current)}
             className="accent-stamp"
           />
           Pull out the document type and key fields
+          {features.extract ? null : (
+            <span className="text-xs text-muted">(turned off on this server)</span>
+          )}
         </label>
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
-            checked={describe}
-            disabled={status === "loading"}
+            checked={describe && features.describe}
+            disabled={status === "loading" || !features.describe}
             onChange={() => setDescribe((current) => !current)}
             className="accent-stamp"
           />
           Describe each region in a few words
-          <span className="text-xs text-muted">(up to 8 more Muse calls)</span>
+          <span className="text-xs text-muted">
+            {features.describe ? "(up to 8 more Muse calls)" : "(turned off on this server)"}
+          </span>
         </label>
         {selectionChanged ? (
           <p role="status" className="text-sm text-muted">
