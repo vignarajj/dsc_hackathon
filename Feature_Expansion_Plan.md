@@ -411,10 +411,66 @@ otherwise; checks on real photos are tracked as their own rows.
 | H2 | Server-side feature flags | §5.3 | Done | Yes | Yes | Yes | `FEATURE_EXTRACT`, `FEATURE_DESCRIBE`, `FEATURE_PRIVACY`, default on; image text keeps `REDACT_IMAGE_TEXT`. `GET /api/config` lets the page mark options that are off. |
 | H3 | Live smoke script (`backend/scripts/smoke.py`) | §6 | Done | Yes | Yes | Yes | Tested against the fake gateway; not yet run live. Sends nothing without `--yes`. Its table feeds L1 and L2. |
 | H4 | Prompts in one `prompts.py` | §5.6 | Not Started | No | No | No | Optional tidy-up. Prompts live in `meta.py` today. |
-| L1 | Acceptance checks on real photos (F1, F2, F3) | §4 | Blocked | No | No | No | Needs 2 to 3 real phone photos and live calls. Also settles signature boxes and F1c. |
-| L2 | Evaluation sheet | §6 | Not Started | No | No | No | Needs live calls; `smoke.py` prints most of it. Numbers go in the README. |
+| L1 | Acceptance checks on real photos (F1, F2, F3) | §4 | In Progress | No | Yes | Yes | Run on the four generated samples on 27 Oct, 40 calls (§14): F1, F3 and F7 pass, F2 partly. Still open: real phone photos, real signatures, and F1c. Needs 2 to 3 photos and a go on calls. |
+| L2 | Evaluation sheet | §6 | In Progress | No | Yes | Yes | Numbers for the four generated samples are in §14 and the README. Real-photo numbers wait on photos. |
 | R1a | Deploy configs: `backend/Dockerfile`, `render.yaml`, `frontend/vercel.json`, `docs/DEPLOY.md` | §8 | Done | No | Yes | Yes | The image's install and start commands were run outside a container (no base image could be pulled here), and the container was not built. `FORWARDED_ALLOW_IPS` trusts private ranges only; `*` would let visitors skip the rate limit. |
 | R1b | Deploy, rate limit, spend alert, streaming through the host | §8 | Not Started | No | No | No | Needs Render and Vercel accounts and the key; follow `docs/DEPLOY.md`. |
 | R2 | Demo video and final README | §9, §12 | Not Started | No | No | No | |
 | R3 | Repo public, submit on the portal | §12 | Not Started | No | No | No | Target 3 Nov. |
 | M1 | Merge into `main` | — | Done | Yes | Yes | Yes | vignarajj/dsc_hackathon#1, rebase-merged; `main` at `07a4401`. All CI jobs green, e2e for the first time on GitHub. |
+
+---
+
+## 14. Live run on the four samples (27 Oct 2026)
+
+**Setup.** The real API and key, the four sample pages in
+`frontend/public/samples/` (generated for this app, 1600 px, so cleaner than
+real phone photos), and the page's default choices: four regions, signature
+and photograph hidden, personal details masked, key fields on. A throwaway
+launcher in the scratchpad counted every model call and refused any past the
+cap of 40. It used exactly 40 and none failed; no extraction needed a repair
+prompt. `backend/scripts/smoke.py` ran the four pages (36 calls), then 3 calls
+for the logo check and 1 for a question.
+
+| Page | Type | Regions found | Fields found in the text | Drawn-in personal details hidden | Time |
+|---|---|---|---|---|---|
+| chat | chat, right | rectangle x8 (the chat bubbles) | 10 of 10 | 6 of 6 | 17.0 s |
+| handwritten note | note, right | none | 11 of 11 | 3 of 3 | 8.7 s |
+| invoice | invoice, right | stamp | 19 of 19 | 5 of 5 | 17.1 s |
+| signed form | form, right | stamp, signature, photograph | 14 of 14 | 6 of 6 | 15.8 s |
+| **Total** | **4 of 4** | | **54 of 54** | **20 of 20** | 8.7 to 17.1 s |
+
+"Hidden" means the item, as I drew it into the page, no longer appears in the
+shareable text. Five more items were masked that were not on my list, all
+personal: two sort codes and the names "Sam", "Ana", and "R. Shah".
+
+**Acceptance checks (§4).**
+
+| Check | Result |
+|---|---|
+| F1: signature and photo fully hidden on the signed form | Pass. Both are fully covered in the share-safe image. The signature area is a box, larger than the signature and including its label, because Muse boxes have no mask. |
+| F1: phone and ID numbers masked in the shareable text | Pass, 6 of 6 on the form. |
+| F1: no metadata in the downloaded file | Pass. None of the four share-safe files has EXIF. The samples had none to start with; the unit test strips real EXIF. |
+| F1: no false signature on pages without one | Pass. The Muse lookup returned nothing for the chat, the note, and the invoice. |
+| F2: "logo" marks the logo in its own color | Partly. It boxed the logo mark (58 px, score 0.85) in purple, with the legend color returned. It also boxed the round PAID stamp as a second "logo" (score 0.73), and the wordmark beside the mark was not covered. This matches F0. |
+| F3: right type and 3 or more fields found in the text | Pass for the invoice (19 fields) and the form (14). The receipt was not in these four pages. |
+| F7: ask a question | Pass. "What is the total due?" gave "The total due is $1,200.00." with a quote taken word for word from the page. |
+
+**Time per call** (40 calls, median / slowest): segment 1.7 / 4.0 s (17
+calls), transcribe 5.2 / 9.8 s, proofread 3.1 / 8.7 s, extract 6.0 / 7.4 s,
+personal details 4.9 / 12.3 s, signature lookup 3.0 / 5.0 s, ask 1.6 s.
+
+**Response size (§5.4).** At 1600 px the overlay PNG was 291 to 939 KB and the
+share-safe PNG 261 to 839 KB, well under the 3 MB line, so both stay PNG.
+Real photos at 2048 px compress worse, so this is rechecked on them.
+
+**Decisions.**
+- Muse signature boxes stay: right on the one generated signature, no false
+  positives on three other pages. Not yet proven on a real signature.
+- `REDACT_IMAGE_TEXT` (F1c) stays off, and region descriptions stay off by
+  default on the page. Neither was run, to stay within the cap.
+- The PNG overlay stays.
+
+**Not covered by this run:** real phone photos, real handwritten signatures,
+F1c, region descriptions, a receipt, and streaming through a host. They need
+photos and more calls; tracked in `docs/LAUNCH.md`.

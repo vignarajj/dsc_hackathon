@@ -90,6 +90,18 @@ With the page's default choices (four regions, fields on, personal details on, d
 - By default, text inside the share-safe image is not hidden, and the page says so; share the masked text instead. `REDACT_IMAGE_TEXT=true` also blacks out sensitive words in the image, and stays off until it is checked on real photos.
 - Region descriptions never name or guess who a person is.
 
+## How well it works
+
+Measured on 27 Oct 2026 with the real models on the four sample pages in `frontend/public/samples/`, with the page's default choices. Those pages were made for this app, so they are cleaner than real phone photos.
+
+- The document type was right on 4 of 4 pages, and all 54 extracted field values were found in the page's text.
+- 20 of 20 personal details drawn into the pages are hidden in the shareable text: phone numbers, emails, names, addresses, ID and account numbers, and a date of birth. Five more were masked that I had not listed, all personal (two sort codes and three names).
+- On the signed form, the signature and the photo were fully hidden in the share-safe image, and nothing was falsely marked as a signature on the other three pages.
+- "Logo" found the logo mark but also boxed a round stamp as a logo.
+- A page took 9 to 17 seconds, and a question about the page about 2 seconds.
+
+Not yet measured: real phone photos, real handwritten signatures, text hidden inside the picture (off by default), and region descriptions. `backend/scripts/smoke.py` repeats the page checks. The full table is in `Feature_Expansion_Plan.md` §14.
+
 ## Requirements
 
 - Python 3.14 and [uv](https://docs.astral.sh/uv/)
