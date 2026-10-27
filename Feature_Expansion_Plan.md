@@ -405,10 +405,10 @@ otherwise; checks on real photos are tracked as their own rows.
 | F8 | Read aloud | §4 F8 | Done | Yes | Yes | Yes | Browser speech, no API call. Spoken in sentence-sized pieces; hidden without speech. No language is set, since the API does not report one. |
 | H1 | Overall request budget (`REQUEST_BUDGET_SECONDS`) | §5.3 | Done | Yes | Yes | Yes | 150 s default for the optional steps; a late step is cancelled and named in `warnings`. Core steps are never cut. |
 | H2 | Server-side feature flags | §5.3 | Done | Yes | Yes | Yes | `FEATURE_EXTRACT`, `FEATURE_DESCRIBE`, `FEATURE_PRIVACY`, default on; image text keeps `REDACT_IMAGE_TEXT`. `GET /api/config` lets the page mark options that are off. |
-| H3 | Live smoke script (`backend/scripts/smoke.py`) | §6 | Not Started | No | No | No | Written without calls; running it spends calls. |
+| H3 | Live smoke script (`backend/scripts/smoke.py`) | §6 | Done | Yes | Yes | Yes | Tested against the fake gateway; not yet run live. Sends nothing without `--yes`. Its table feeds L1 and L2. |
 | H4 | Prompts in one `prompts.py` | §5.6 | Not Started | No | No | No | Optional tidy-up. Prompts live in `meta.py` today. |
 | L1 | Acceptance checks on real photos (F1, F2, F3) | §4 | Blocked | No | No | No | Needs 2 to 3 real phone photos and live calls. Also settles signature boxes and F1c. |
-| L2 | Evaluation sheet | §6 | Not Started | No | No | No | Needs live calls; numbers go in the README. |
+| L2 | Evaluation sheet | §6 | Not Started | No | No | No | Needs live calls; `smoke.py` prints most of it. Numbers go in the README. |
 | R1 | Deploy, rate limit, spend alert, streaming through the host | §8 | Not Started | No | No | No | Needs host accounts. |
 | R2 | Demo video and final README | §9, §12 | Not Started | No | No | No | |
 | R3 | Repo public, submit on the portal | §12 | Not Started | No | No | No | Target 3 Nov. |
