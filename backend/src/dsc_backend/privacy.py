@@ -15,6 +15,31 @@ CATEGORIES = (
     "name",
 )
 
+SPANS_FORMAT = {
+    "type": "json_schema",
+    "name": "sensitive_spans",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["items"],
+        "properties": {
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["category", "text"],
+                    "properties": {
+                        "category": {"type": "string", "enum": list(CATEGORIES)},
+                        "text": {"type": "string"},
+                    },
+                },
+            }
+        },
+    },
+}
+
 _MAX_MODEL_SPANS = 50
 _MAX_SPAN_CHARS = 200
 

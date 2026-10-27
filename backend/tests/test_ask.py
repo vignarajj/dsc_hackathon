@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from dsc_backend.ask import NOT_IN_DOCUMENT, Question, parse_answer, question_for_request
 from dsc_backend.errors import PipelineError
 from dsc_backend.main import create_app
-from dsc_backend.meta import ask_prompt
+from dsc_backend.prompts import ask_prompt
 from test_process import FakeGateway, _png, _settings
 
 TEXT = "Invoice INV-2041\nTotal due: $1,200.00\nDue: 28 Oct 2026"

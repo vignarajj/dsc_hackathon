@@ -353,6 +353,34 @@ minute. It is off (`0`) by default. Over the limit is HTTP 429 with
 `"Too many requests. Wait a minute and try again."`. The count lives in memory,
 so it resets on restart and is per process.
 
+## Code layout
+
+All in `src/dsc_backend/`:
+
+| File | What it holds |
+|---|---|
+| `main.py` | The FastAPI app and its endpoints |
+| `form.py` | Reading and checking the form fields |
+| `pipeline.py` | The order of steps for one request |
+| `progress.py` | Stage events and the NDJSON stream |
+| `budget.py` | The deadline for the optional steps |
+| `meta.py` | Every Meta model call, and reading the box replies |
+| `prompts.py` | Every prompt, and the fence for uploaded text |
+| `sam.py` | Turning SAM's stream into regions |
+| `imaging.py` | Decoding the upload, the overlay, and the colors |
+| `redaction.py` | The share-safe image |
+| `privacy.py` | Personal-detail patterns, span checks, and masking |
+| `extraction.py` | The document data schema and the grounding check |
+| `describe.py` | Region crops and notes |
+| `ask.py` | Checking a question and reading the answer |
+| `boxes.py` | Reading JSON replies and pixel boxes |
+| `regions.py` | The region type and box clipping |
+| `config.py`, `errors.py`, `ratelimit.py` | Settings, the error type, and the rate limit |
+
+To change what a model is asked, edit `prompts.py` only. `tests/test_prompts.py`
+checks that every prompt fences uploaded text, says it is data, and fills in
+every placeholder.
+
 ## Tests
 
 ```bash

@@ -5,7 +5,7 @@ hardening, and the deploy configs are merged; their history is in
 `Feature_Expansion_Plan.md` §13. What is left here needs live Meta calls,
 host accounts, or a person.
 
-Everything here is on `main` as of 27 Oct 2026 (`c3f5678`). Update this table in every commit that changes an item. `Status` is one of
+On 27 Oct 2026 this tracker and the live-run results were pushed to `main` (`c3f5678`). Update this table in every commit that changes an item. `Status` is one of
 `Not Started`, `In Progress`, `Done`, or `Blocked` (with the blocker named).
 Dates are from the expansion plan's schedule (§7): feature freeze 31 Oct,
 submission 3 Nov, 4 Nov as buffer.
@@ -17,7 +17,7 @@ submission 3 Nov, 4 Nov as buffer.
 | 3 | Deploy a public copy | You | Render and Vercel accounts, the Meta key | 1 Nov | Not Started | Follow `docs/DEPLOY.md`. The first Render build is also the first real build of `backend/Dockerfile`. |
 | 4 | Demo video and final README | You | Items 2 and 3 done | 2 Nov | Not Started | Script in the expansion plan §9. |
 | 5 | Repo public, About section, submit | You | Items 3 and 4 done | 3 Nov | Not Started | The GitHub description still describes the first version. |
-| 6 | Prompts in one `prompts.py` | You | Nothing | Any time | Not Started | Optional tidy-up; not needed for the demo. |
+| 6 | Prompts in one `prompts.py` | You | Nothing | Any time | Done | A pure move: the 13 requests the gateway sends are byte for byte the same as before. See `backend/README.md` (Code layout). |
 
 ## 2. Live session
 

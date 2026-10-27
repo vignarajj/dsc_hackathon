@@ -2,6 +2,8 @@ import pytest
 
 from dsc_backend.errors import PipelineError
 from dsc_backend.privacy import (
+    CATEGORIES,
+    SPANS_FORMAT,
     Span,
     mask_text,
     merge_spans,
@@ -133,3 +135,9 @@ def test_surnames_of_full_names_are_masked_on_their_own() -> None:
     # "Shah" never appears alone, and one-word names have no surname to add.
     assert [(span.category, span.text) for span in extra] == [("name", "Greene")]
     assert mask_text(text, spans + extra) == "Mr [NAME]\nDear Mr [NAME],\nSigned, [NAME] and [NAME]"
+
+
+def test_the_span_schema_allows_exactly_the_known_categories() -> None:
+    item = SPANS_FORMAT["schema"]["properties"]["items"]["items"]  # type: ignore[index]
+    assert item["properties"]["category"]["enum"] == list(CATEGORIES)
+    assert SPANS_FORMAT["strict"] is True
