@@ -355,6 +355,30 @@ its own test file (`test_redaction.py`, `test_privacy.py`, `test_extraction.py`,
 `test_describe.py`, `test_ask.py`, `test_stream.py`, and so on), and
 `test_process.py` covers the `/api/process` contract.
 
+## Live smoke test
+
+`scripts/smoke.py` sends pages to a running API, real models and all, and
+prints a pass/fail table with timings. It spends real calls (about 9 per page,
+plus 1 with `--ask`), so it prints the estimate and sends nothing unless you
+add `--yes`. Run it before recording a demo and after a deploy:
+
+```bash
+uv run python scripts/smoke.py --yes                                  # the four samples, local API
+uv run python scripts/smoke.py --yes --ask --base-url https://api.example.app
+uv run python scripts/smoke.py --yes path/to/photo.jpg                # your own pages
+```
+
+Each page sends the page's default choices (four regions, signature and
+photograph hidden, text masked, fields on). Every page must return an
+overlay, text, and a share-safe image. The four samples are also checked
+against what they should give: the document type, the regions (a stamp on
+the invoice; a signature and a photograph on the form), the kinds of personal
+details masked, and at least 3 grounded fields on the invoice and the form.
+The exit status is 1 when any page fails. `tests/test_smoke.py` runs it
+against the fake gateway, so it is tested without calls.
+
+## Fake API for the browser tests
+
 `tests/fake_server.py` runs the real app with a fixed gateway for the browser
 tests in `frontend/e2e/`. It never calls Meta:
 

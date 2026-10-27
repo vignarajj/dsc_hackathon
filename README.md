@@ -28,6 +28,7 @@ There is no account system, no saved history, and no multi-page document support
 | Path | What it is |
 |---|---|
 | `backend/` | FastAPI service. Checks the image, calls the models, draws the overlay and the share-safe copy, and streams progress. |
+| `backend/scripts/smoke.py` | Live check against a running API: sends the sample pages and prints a pass/fail table. Spends real calls, so it needs `--yes`. |
 | `backend/tests/fake_server.py` | The real API with a fixed model gateway, for browser tests. Never calls Meta. |
 | `frontend/` | Next.js page. Uploads the image and shows the result in tabs. |
 | `frontend/public/samples/` | Four sample pages made for this app. Names are invented; phone numbers are from reserved drama ranges. |
@@ -153,7 +154,7 @@ cd frontend && pnpm test:e2e   # browser tests against the fake API
 
 GitHub Actions runs all three on every push and pull request.
 
-None of these call Meta or need a key. The backend tests use a stand-in model gateway. The frontend unit tests cover the API client, the stream reader, exports, and validation. The browser tests run the built page against `backend/tests/fake_server.py` on desktop and on a 375 px dark-mode phone; see `frontend/README.md`. A pass against the real API needs the key and is a separate step.
+None of these call Meta or need a key. `backend/scripts/smoke.py` is the live check: it sends the sample pages (or your own) to a running API with real models and prints a pass/fail table with timings. It only runs with `--yes`, since it spends about 9 calls per page; see `backend/README.md`. The backend tests use a stand-in model gateway. The frontend unit tests cover the API client, the stream reader, exports, and validation. The browser tests run the built page against `backend/tests/fake_server.py` on desktop and on a 375 px dark-mode phone; see `frontend/README.md`. The smoke script is that separate pass against the real API.
 
 ## Hosting
 
