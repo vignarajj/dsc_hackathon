@@ -124,6 +124,51 @@ test("the document answers from its own text, with a quote", async ({ page }) =>
   await expect(answers.getByRole("listitem").first()).not.toContainText("From the page");
 });
 
+test("read aloud speaks the proofread text in pieces and stops", async ({ page }) => {
+  // Headless Chromium has no voices, so record what the page asks the browser to say.
+  await page.addInitScript(() => {
+    const said: string[] = [];
+    const record = window as unknown as { said: string[]; cancels: number };
+    record.said = said;
+    record.cancels = 0;
+    Object.defineProperty(window, "speechSynthesis", {
+      configurable: true,
+      value: {
+        speak: (utterance: SpeechSynthesisUtterance) => said.push(utterance.text),
+        cancel: () => {
+          record.cancels += 1;
+        },
+      },
+    });
+  });
+  await cleanSample(page);
+  await page.getByRole("tab", { name: "Text" }).click();
+  const text = page.getByRole("tabpanel", { name: "Text" });
+  await text.getByRole("button", { name: "Read aloud" }).click();
+  const said = await page.evaluate(() => (window as unknown as { said: string[] }).said);
+  expect(said.join(" ")).toContain("Signature of applicant");
+  expect(said.join(" ")).not.toContain("Signture");
+  await expect(text.getByRole("button", { name: "Stop reading" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await text.getByRole("button", { name: "Stop reading" }).click();
+  await expect(text.getByRole("button", { name: "Read aloud" })).toBeVisible();
+  const cancels = await page.evaluate(() => (window as unknown as { cancels: number }).cancels);
+  expect(cancels).toBeGreaterThanOrEqual(2);
+});
+
+test("read aloud is hidden where the browser cannot speak", async ({ page }) => {
+  await page.addInitScript(() => {
+    delete (window as unknown as { speechSynthesis?: unknown }).speechSynthesis;
+  });
+  await cleanSample(page);
+  await page.getByRole("tab", { name: "Text" }).click();
+  const text = page.getByRole("tabpanel", { name: "Text" });
+  await expect(text.getByRole("button", { name: "Copy cleaned text" })).toBeVisible();
+  await expect(text.getByRole("button", { name: "Read aloud" })).toHaveCount(0);
+});
+
 test("tabs follow the arrow, Home, and End keys", async ({ page }) => {
   await cleanSample(page);
   const overview = page.getByRole("tab", { name: "Overview" });

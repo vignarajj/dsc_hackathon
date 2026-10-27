@@ -17,7 +17,7 @@ It was built for the Meta Global AI Developer Hackathon, Indie track, on the the
 4. Press Clean screenshot. A step list shows each stage as it finishes. A request can take up to a minute. Cancel stops it on the server too. The page gives up after 180 seconds and offers Try again.
 5. Read the result in four tabs:
    - **Overview**: the original and the SAM overlay under one slider. Point at a region to outline it. Download the overlay PNG.
-   - **Text**: the transcription beside the proofread, with edits marked. Copy it or download Markdown. Ask the document a question and get an answer with the exact words it came from.
+   - **Text**: the transcription beside the proofread, with edits marked. Copy it or download Markdown. Have it read aloud. Ask the document a question and get an answer with the exact words it came from.
    - **Data**: the document type, a summary, and key fields, each marked when its value is not in the text. Download JSON or CSV.
    - **Share-safe**: the hidden copy under a before/after slider, with no location or camera data, and the text with personal details replaced by `[PHONE]`, `[NAME]`, and so on.
 

@@ -7,6 +7,7 @@ import type { ProcessResponse } from "@/lib/process-client";
 import { textChanges, type TextChange } from "@/lib/text-diff";
 
 import { AskBox } from "./ask-box";
+import { ReadAloud } from "./read-aloud";
 
 export function TextTab({
   result,
@@ -99,6 +100,7 @@ function Reading({
           >
             Download Markdown
           </button>
+          <ReadAloud text={cleaned} />
           {notice ? (
             <span role="status" className="text-sm text-muted">
               {notice}
