@@ -24,6 +24,7 @@ class Settings:
     sam_concepts: tuple[str, ...] = DEFAULT_CONCEPTS
     max_upload_bytes: int = MAX_UPLOAD_BYTES
     upstream_timeout_seconds: float = 60.0
+    request_budget_seconds: float = 150.0
     max_image_edge: int = 2048
     rate_limit_per_minute: int = 0
 
@@ -51,6 +52,7 @@ def load_settings(env_file: Path | None = None) -> Settings:
         sam_concepts=_csv("SAM_CONCEPTS", DEFAULT_CONCEPTS),
         max_upload_bytes=MAX_UPLOAD_BYTES,
         upstream_timeout_seconds=_positive_float("UPSTREAM_TIMEOUT_SECONDS", 60.0),
+        request_budget_seconds=_positive_float("REQUEST_BUDGET_SECONDS", 150.0),
         max_image_edge=2048,
         rate_limit_per_minute=_non_negative_int("RATE_LIMIT_PER_MINUTE", 0),
     )

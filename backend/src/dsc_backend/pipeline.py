@@ -1,9 +1,9 @@
 import asyncio
 import base64
 import logging
-from collections.abc import Awaitable
 from dataclasses import dataclass, field, replace
 
+from dsc_backend.budget import Budget
 from dsc_backend.config import Settings
 from dsc_backend.describe import describe_regions
 from dsc_backend.errors import PipelineError
@@ -23,6 +23,13 @@ from dsc_backend.redaction import render_redacted
 from dsc_backend.regions import Region, clamp_box
 
 logger = logging.getLogger(__name__)
+
+# Names of the optional steps, as the budget warning shows them.
+_SIGNATURES = "Finding signatures"
+_DESCRIBE = "Describing regions"
+_EXTRACT = "Pulling out key fields"
+_PRIVACY = "Finding personal details"
+_TEXT_BOXES = "Finding text in the picture"
 
 
 @dataclass(frozen=True)
@@ -70,6 +77,7 @@ async def process_image(
     hide = redaction or Redaction()
     width, height = prepared.image.size
     warnings: list[str] = []
+    budget = Budget(settings.request_budget_seconds)
     progress = Progress(emit)
     await progress.plan(
         ["prepare"]
@@ -90,7 +98,7 @@ async def process_image(
                 segment_task = group.create_task(
                     progress.run(
                         "segment",
-                        _segment(gateway, prepared.data_url, selected, width, height),
+                        _segment(gateway, prepared.data_url, selected, width, height, budget),
                         lambda found: _region_summary(selected, found[0]),
                     )
                 )
@@ -99,7 +107,10 @@ async def process_image(
                 describe_task = group.create_task(
                     progress.run(
                         "describe",
-                        _describe_after(segment_task, gateway, prepared, width, height),
+                        budget.optional(
+                            _describe_after(segment_task, gateway, prepared, width, height),
+                            _DESCRIBE,
+                        ),
                         _described_summary,
                     )
                 )
@@ -114,7 +125,7 @@ async def process_image(
         raise _from_group(group) from group
 
     found_by_concept, signatures_failed = segment_task.result() if segment_task else ([], False)
-    if signatures_failed:
+    if signatures_failed and not budget.was_cut(_SIGNATURES):
         warnings.append(
             "Signatures could not be located, so none are "
             + ("marked or hidden." if "signature" in hide.labels else "marked.")
@@ -122,8 +133,8 @@ async def process_image(
     kept = _on_image(found_by_concept, width, height)
     regions = [region for region, _ in kept]
     boxes = [box for _, box in kept]
-    if describe_task is not None:
-        notes = describe_task.result()
+    notes = describe_task.result() if describe_task is not None else None
+    if notes is not None:
         boxes = [replace(box, description=note) for box, note in zip(boxes, notes, strict=True)]
     original_text = transcript_task.result().strip()
 
@@ -138,7 +149,7 @@ async def process_image(
                 model_task = group.create_task(
                     progress.run(
                         "privacy",
-                        _optional(gateway.sensitive_spans(original_text))
+                        budget.optional(gateway.sensitive_spans(original_text), _PRIVACY)
                         if original_text
                         else _nothing([]),
                     )
@@ -147,7 +158,7 @@ async def process_image(
                 extract_task = group.create_task(
                     progress.run(
                         "extract",
-                        _optional(_extract(gateway, original_text))
+                        budget.optional(_extract(gateway, original_text), _EXTRACT)
                         if original_text
                         else _nothing(""),
                     )
@@ -160,7 +171,8 @@ async def process_image(
     if extract_task is not None and original_text:
         reply = extract_task.result()
         if reply is None:
-            warnings.append("Muse could not pull out the document's fields.")
+            if not budget.was_cut(_EXTRACT):
+                warnings.append("Muse could not pull out the document's fields.")
         else:
             # Checked against both texts, since the proofread may fix a misread value.
             document = parse_document(reply, original_text, cleaned_text)
@@ -168,9 +180,10 @@ async def process_image(
     sensitive: list[Span] = []
     shareable_text: str | None = None
     if hide.text:
-        sensitive, shareable_text = _mask_sensitive(
-            original_text, cleaned_text, model_task.result() if model_task else [], warnings
-        )
+        spans = model_task.result() if model_task else []
+        if spans is None and budget.was_cut(_PRIVACY):
+            spans = []  # The budget warning says it was skipped; the patterns still run.
+        sensitive, shareable_text = _mask_sensitive(original_text, cleaned_text, spans, warnings)
 
     colors = region_colors(selected)
     overlay, redacted, text_boxes, hidden = await progress.run(
@@ -185,8 +198,10 @@ async def process_image(
             colors,
             signatures_failed,
             warnings,
+            budget,
         ),
     )
+    warnings.extend(budget.warnings())
     logger.info(
         "processed concepts=%s boxes=%s hidden=%s text_chars=%s",
         ",".join(selected) or "-",
@@ -246,7 +261,9 @@ async def _describe_after(
     return await describe_regions(prepared.image, boxes, gateway.describe_region)
 
 
-def _described_summary(notes: list[str | None]) -> str:
+def _described_summary(notes: list[str | None] | None) -> str:
+    if notes is None:
+        return "skipped"
     return f"{sum(note is not None for note in notes)} of {len(notes)} described"
 
 
@@ -256,6 +273,7 @@ async def _segment(
     selected: tuple[str, ...],
     width: int,
     height: int,
+    budget: Budget,
 ) -> tuple[list[list[Region]], bool]:
     """SAM for every concept and, for signatures, Muse boxes too, all at once.
 
@@ -267,7 +285,7 @@ async def _segment(
         tasks = [group.create_task(gateway.segment(data_url, concept)) for concept in selected]
         if "signature" in selected:
             signature_task = group.create_task(
-                _optional(gateway.signatures(data_url, width, height))
+                budget.optional(gateway.signatures(data_url, width, height), _SIGNATURES)
             )
     muse_signatures = signature_task.result() if signature_task else []
     found: list[list[Region]] = []
@@ -289,14 +307,17 @@ async def _render(
     colors: Colors,
     signatures_failed: bool,
     warnings: list[str],
+    budget: Budget,
 ) -> tuple[bytes, bytes | None, dict[str, list[tuple[int, int, int, int]]] | None, int]:
     """Draw the overlay and build the share-safe copy."""
     width, height = prepared.image.size
     overlay = render_overlay(prepared.image, regions, colors)
     text_boxes = None
     if hide.text and settings.redact_image_text and sensitive:
-        text_boxes = await _locate_text(gateway, prepared.data_url, width, height, sensitive)
-        if text_boxes is None:
+        text_boxes = await budget.optional(
+            gateway.text_boxes(prepared.data_url, width, height, _lines(sensitive)), _TEXT_BOXES
+        )
+        if text_boxes is None and not budget.was_cut(_TEXT_BOXES):
             warnings.append("Text in the picture could not be located, so it is not hidden.")
         elif len(text_boxes) < len(_lines(sensitive)):
             warnings.append(
@@ -350,16 +371,6 @@ def _lines(spans: list[Span]) -> list[str]:
     return lines
 
 
-async def _locate_text(
-    gateway: MetaGateway,
-    data_url: str,
-    width: int,
-    height: int,
-    spans: list[Span],
-) -> dict[str, list[tuple[int, int, int, int]]] | None:
-    return await _optional(gateway.text_boxes(data_url, width, height, _lines(spans)))
-
-
 def _mask_sensitive(
     original_text: str,
     cleaned_text: str,
@@ -389,15 +400,6 @@ def _mask_sensitive(
             "Check the shareable text before you send it."
         )
     return spans, mask_text(cleaned_text, spans)
-
-
-async def _optional[T](call: Awaitable[T]) -> T | None:
-    """Run a step whose failure should not fail the request."""
-    try:
-        return await call
-    except Exception as exc:
-        logger.warning("optional step failed: %s", type(exc).__name__)
-        return None
 
 
 def _new_regions(candidates: list[Region], existing: list[Region]) -> list[Region]:
