@@ -405,14 +405,27 @@ add `--yes`. Run it before recording a demo and after a deploy:
 uv run python scripts/smoke.py --yes                                  # the four samples, local API
 uv run python scripts/smoke.py --yes --ask --base-url https://api.example.app
 uv run python scripts/smoke.py --yes path/to/photo.jpg                # your own pages
+uv run python scripts/smoke.py --yes --describe path/to/photo.jpg    # also describe regions
+uv run python scripts/smoke.py --yes --ask --delay 13 --base-url ...  # behind a rate limit of 5
 ```
+
+`--describe` sends the describe switch and adds up to 8 calls per page; a page
+fails when its regions come back without descriptions (including when the
+server has `FEATURE_DESCRIBE=false`). `--delay SECONDS` waits before every
+request after the first; a limit of 5 a minute needs 13, since each page and
+each `--ask` question counts as one request. A 429 in the table says so. The
+text blackout in the picture (F1c) is a server setting: start the API with
+`REDACT_IMAGE_TEXT=true` and the script's `redact_text` field takes effect,
+for 1 more call per page.
 
 Each page sends the page's default choices (four regions, signature and
 photograph hidden, text masked, fields on). Every page must return an
 overlay, text, and a share-safe image. The four samples are also checked
 against what they should give: the document type, the regions (a stamp on
 the invoice; a signature and a photograph on the form), the kinds of personal
-details masked, and at least 3 grounded fields on the invoice and the form.
+details masked, and at least 3 grounded fields on the invoice and the form. A
+page named `receipt.jpg` or `receipt.png` is checked for the type `receipt`
+and 3 grounded fields.
 The exit status is 1 when any page fails. `tests/test_smoke.py` runs it
 against the fake gateway, so it is tested without calls.
 

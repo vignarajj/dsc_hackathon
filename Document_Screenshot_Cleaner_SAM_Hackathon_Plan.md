@@ -360,7 +360,7 @@ Update `Status` as work progresses. Allowed values: `Not Started` →
 
 1. The page shows proofread edits, region checkboxes, Try again, Cancel, region counts, and overlay download. The demo videos predate those controls. The repo is still private.
 2. Make the repo public, or invite the judges, before you rely on the GitHub link.
-3. Submit on the Cerebral Valley portal yourself. Deploy stays local unless the demo needs a public URL.
+3. Submit on the Cerebral Valley portal yourself. The public copy is planned in `docs/LAUNCH.md` and `docs/DEPLOY.md`.
 
 ---
 

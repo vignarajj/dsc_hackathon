@@ -47,9 +47,8 @@ Never set `FORWARDED_ALLOW_IPS` to `*`. uvicorn then takes the leftmost
 address, which the visitor writes themselves, so anyone can send a new
 made-up address with each request and skip the limit.
 
-Check it after the deploy: send six requests in a minute from one machine; the
-sixth must be HTTP 429. Then try from a second network at once; it must still
-work. If the second network is refused too, Render's proxy is not connecting
+Check it after the deploy, with the six bad uploads in step 4: the sixth must
+be HTTP 429. Then try one from a second network at once; it must not be 429. If the second network is refused too, Render's proxy is not connecting
 from a private address and every visitor shares one limit. That fails safe
 (the key is still capped), but raise `RATE_LIMIT_PER_MINUTE` or ask Render
 for its proxy range.
@@ -85,8 +84,20 @@ curl -s $API/api/config          # describe should be false
 curl -sN -H "accept: application/x-ndjson" \
   -F "image=@frontend/public/samples/invoice.jpg;type=image/jpeg" $API/api/process | cut -c1-80
 
+# The rate limit, with no model calls: the limit is checked before the upload
+# is, so six bad uploads give 400 five times and then 429. Wait a minute after
+# this before the smoke test, or it counts against the same limit.
+for i in 1 2 3 4 5 6; do
+  curl -s -o /dev/null -w "$i: %{http_code}\n" \
+    -F "image=not-an-image;filename=x.png;type=image/png" $API/api/process
+done
+# Expect 400 400 400 400 400 429. Run the loop again from a second network
+# within the minute; its first request must be 400, not 429.
+
 # The live smoke test: about 9 calls per page, 40 with --ask on the samples.
-cd backend && uv run python scripts/smoke.py --yes --ask --base-url $API
+# --delay 13 keeps it under RATE_LIMIT_PER_MINUTE=5, since each page and each
+# question counts as one request. Without it, the third page's question is 429.
+cd backend && uv run python scripts/smoke.py --yes --ask --delay 13 --base-url $API
 ```
 
 Then open the page, clean a sample, and check that the step list fills in,

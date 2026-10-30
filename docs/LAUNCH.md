@@ -23,7 +23,10 @@ submission 3 Nov, 4 Nov as buffer.
 
 Steps:
 1. Run `backend/scripts/smoke.py --yes --ask` on the four samples and the
-   photos, against a local API with the real key.
+   photos, against a local API with the real key. Name a receipt photo
+   `receipt.jpg` to get the receipt checks, add `--describe` for the region
+   descriptions (up to 8 more calls per page), and start the API with
+   `REDACT_IMAGE_TEXT=true` for the F1c trial (1 more call per page).
 2. Acceptance checks from the expansion plan:
    - F1: on the signed form, the signature and photo are fully hidden with no
      visible edge, phone and ID numbers are masked in the shareable text, and
@@ -59,7 +62,8 @@ Steps (detail in `docs/DEPLOY.md`):
 3. Set `CORS_ORIGINS` on the API to the page URL and redeploy.
 4. Checks: health and config, progress arrives line by line, the rate limit
    (the sixth request in a minute is 429, a second network still works), and
-   `smoke.py --yes --ask --base-url <API URL>`.
+   `smoke.py --yes --ask --delay 13 --base-url <API URL>`. The rate-limit check
+   uses six bad uploads, so it spends no model calls.
 5. A spend alert or limit on the Meta key.
 
 Done when: every check passes on the public URLs.

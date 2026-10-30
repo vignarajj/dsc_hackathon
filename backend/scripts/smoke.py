@@ -4,6 +4,7 @@ This spends real Meta model calls, so it only runs with --yes.
 
     uv run python scripts/smoke.py --yes
     uv run python scripts/smoke.py --yes --base-url https://api.example.app --ask
+    uv run python scripts/smoke.py --yes --describe --delay 13 photo.jpg
     uv run python scripts/smoke.py --yes path/to/photo.jpg other.png
 
 With no paths, it uses the four sample pages in frontend/public/samples/.
@@ -13,6 +14,7 @@ Exit status is 0 when every page passes, 1 otherwise.
 import argparse
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -27,6 +29,10 @@ FORM = {
 }
 # The page's default choices make 9 calls per image; see the root README.
 CALLS_PER_PAGE = 9
+# --describe adds one call per described region, up to 8 per image.
+DESCRIBE_CALLS_PER_PAGE = 8
+# 60 s over a limit of 5 requests a minute, rounded up: --delay 13 stays under it.
+RATE_LIMIT_HINT = "rate limited: run with --delay 13, or raise RATE_LIMIT_PER_MINUTE"
 
 
 @dataclass(frozen=True)
@@ -45,6 +51,8 @@ EXPECTED = {
     ),
     "handwritten-note": Expect("note", (), ("phone",), "When is the plumber coming?"),
     "chat": Expect("chat", (), ("phone", "email"), "What was agreed?"),
+    # No sample receipt ships with the repo; name your photo receipt.jpg to get these checks.
+    "receipt": Expect("receipt", question="What was the total?"),
 }
 
 
@@ -60,7 +68,9 @@ class Row:
         return not self.problems
 
 
-def check_result(name: str, body: dict[str, object], expect: Expect | None) -> Row:
+def check_result(
+    name: str, body: dict[str, object], expect: Expect | None, describe: bool = False
+) -> Row:
     """Compare one /api/process result with what the page should give."""
     row = Row(name)
     if not body.get("overlay_png_base64"):
@@ -69,7 +79,14 @@ def check_result(name: str, body: dict[str, object], expect: Expect | None) -> R
         row.problems.append("no text read")
     if not body.get("redacted_png_base64"):
         row.problems.append("no share-safe image")
-    labels = [box.get("label") for box in body.get("boxes", []) if isinstance(box, dict)]
+    boxes = [box for box in body.get("boxes", []) if isinstance(box, dict)]
+    labels = [box.get("label") for box in boxes]
+    if describe and boxes:
+        undescribed = sum(1 for box in boxes if not str(box.get("description") or "").strip())
+        if undescribed == len(boxes):
+            row.problems.append("no region descriptions (off on this server, or all failed)")
+        elif undescribed:
+            row.problems.append(f"{undescribed} of {len(boxes)} regions have no description")
     categories = {
         span.get("category") for span in body.get("sensitive", []) if isinstance(span, dict)
     }
@@ -99,28 +116,52 @@ def check_result(name: str, body: dict[str, object], expect: Expect | None) -> R
     return row
 
 
-def run(client: httpx.Client, paths: list[Path], ask: bool = False) -> list[Row]:
+def _problem_for_status(response: httpx.Response) -> str:
+    detail = response.json().get("detail") if response.content else ""
+    hint = f" ({RATE_LIMIT_HINT})" if response.status_code == 429 else ""
+    return f"HTTP {response.status_code}: {detail}{hint}"
+
+
+def run(
+    client: httpx.Client,
+    paths: list[Path],
+    ask: bool = False,
+    describe: bool = False,
+    delay: float = 0.0,
+    sleep: Callable[[float], None] = time.sleep,
+) -> list[Row]:
+    """Send each page. `delay` seconds pass before every request after the first."""
     rows: list[Row] = []
+    form = {**FORM, "describe": "true"} if describe else FORM
+    sent = 0
+
+    def pause() -> None:
+        nonlocal sent
+        if sent and delay > 0:
+            sleep(delay)
+        sent += 1
+
     for path in paths:
         expect = EXPECTED.get(path.stem)
         media = "image/png" if path.suffix.lower() == ".png" else "image/jpeg"
+        pause()
         started = time.perf_counter()
         try:
             response = client.post(
-                "/api/process", data=FORM, files={"image": (path.name, path.read_bytes(), media)}
+                "/api/process", data=form, files={"image": (path.name, path.read_bytes(), media)}
             )
         except httpx.HTTPError as exc:
             rows.append(Row(path.stem, time.perf_counter() - started, [type(exc).__name__]))
             continue
         seconds = time.perf_counter() - started
         if response.status_code != 200:
-            detail = response.json().get("detail") if response.content else ""
-            rows.append(Row(path.stem, seconds, [f"HTTP {response.status_code}: {detail}"]))
+            rows.append(Row(path.stem, seconds, [_problem_for_status(response)]))
             continue
         body = response.json()
-        row = check_result(path.stem, body, expect)
+        row = check_result(path.stem, body, expect, describe)
         row.seconds = seconds
         if ask:
+            pause()
             answer = client.post(
                 "/api/ask",
                 json={
@@ -130,7 +171,7 @@ def run(client: httpx.Client, paths: list[Path], ask: bool = False) -> list[Row]
                 },
             )
             if answer.status_code != 200:
-                row.problems.append(f"ask: HTTP {answer.status_code}")
+                row.problems.append(f"ask: {_problem_for_status(answer)}")
             else:
                 row.summary += f" answer={answer.json().get('answer', '')[:40]!r}"
         rows.append(row)
@@ -153,16 +194,26 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("paths", nargs="*", type=Path, help="images to send (default: samples)")
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     parser.add_argument("--ask", action="store_true", help="also ask one question per page")
+    parser.add_argument("--describe", action="store_true", help="also describe each region")
+    parser.add_argument(
+        "--delay",
+        type=float,
+        default=0.0,
+        metavar="SECONDS",
+        help="wait this long before each request after the first, to stay under a rate limit",
+    )
     parser.add_argument("--yes", action="store_true", help="spend the model calls")
     args = parser.parse_args(argv)
     paths = args.paths or sorted(SAMPLES.glob("*.jpg"))
-    calls = len(paths) * (CALLS_PER_PAGE + (1 if args.ask else 0))
-    print(f"{len(paths)} pages against {args.base_url}: about {calls} model calls.")
+    per_page = CALLS_PER_PAGE + (1 if args.ask else 0)
+    calls = len(paths) * (per_page + (DESCRIBE_CALLS_PER_PAGE if args.describe else 0))
+    estimate = "up to" if args.describe else "about"
+    print(f"{len(paths)} pages against {args.base_url}: {estimate} {calls} model calls.")
     if not args.yes:
         print("Nothing sent. Run again with --yes to spend the calls.")
         return 1
     with httpx.Client(base_url=args.base_url, timeout=200) as client:
-        rows = run(client, paths, args.ask)
+        rows = run(client, paths, args.ask, args.describe, args.delay)
     print(table(rows))
     return 0 if all(row.passed for row in rows) else 1
 

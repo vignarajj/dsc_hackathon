@@ -401,7 +401,7 @@ otherwise; checks on real photos are tracked as their own rows.
 | F1 UI | Share-safe panel, slider, downloads | §4 F1 | Done | Yes | Yes | Yes | `5f8df1e`. |
 | F2 | Custom region prompts | §4 F2 | Done | Yes | Yes | Yes | `c6a3633`. Up to 3 names, blocklist from F0, palette in the response. |
 | F3 | Structured extraction, JSON and CSV export | §4 F3 | Done | Yes | Yes | Yes | `ad12bc4`. Strict schema, one repair prompt, grounding check, CSV formula defusing. |
-| F6 | Demo UX: tabs, slider, highlight, samples, E2E | §4 F6, §6 | Done | Yes | Yes | Yes | `2f69deb`. Playwright against a fake gateway, desktop and 375 px dark; CI job added, not yet run on GitHub. |
+| F6 | Demo UX: tabs, slider, highlight, samples, E2E | §4 F6, §6 | Done | Yes | Yes | Yes | `2f69deb`. Playwright against a fake gateway, desktop and 375 px dark; CI job added; it passed on GitHub for the first time in the merge (M1). |
 | F4 | Live progress (NDJSON stream) | §4 F4 | Done | Yes | Yes | Yes | `f1749f7`. Disconnect cancels the work. The 5 s fallback to a plain request was left out on purpose: it would send the request twice. |
 | F5 | Region descriptions | §4 F5 | Done | Yes | Yes | Yes | `a23ae58`. Off by default on the page to save calls; the plan had it on. |
 | F7 | Ask the document | §4 F7 | Done | Yes | Yes | Yes | `1ba571f`. `POST /api/ask`, verbatim quotes only, shared rate limit. |
@@ -409,7 +409,7 @@ otherwise; checks on real photos are tracked as their own rows.
 | F8 | Read aloud | §4 F8 | Done | Yes | Yes | Yes | Browser speech, no API call. Spoken in sentence-sized pieces; hidden without speech. No language is set, since the API does not report one. |
 | H1 | Overall request budget (`REQUEST_BUDGET_SECONDS`) | §5.3 | Done | Yes | Yes | Yes | 150 s default for the optional steps; a late step is cancelled and named in `warnings`. Core steps are never cut. |
 | H2 | Server-side feature flags | §5.3 | Done | Yes | Yes | Yes | `FEATURE_EXTRACT`, `FEATURE_DESCRIBE`, `FEATURE_PRIVACY`, default on; image text keeps `REDACT_IMAGE_TEXT`. `GET /api/config` lets the page mark options that are off. |
-| H3 | Live smoke script (`backend/scripts/smoke.py`) | §6 | Done | Yes | Yes | Yes | Tested against the fake gateway; not yet run live. Sends nothing without `--yes`. Its table feeds L1 and L2. |
+| H3 | Live smoke script (`backend/scripts/smoke.py`) | §6 | Done | Yes | Yes | Yes | Tested against the fake gateway; run live on 27 Oct (§14). Sends nothing without `--yes`. `--describe` adds region descriptions, `--delay` stays under a rate limit, and a page named `receipt` gets receipt checks. Its table feeds L1 and L2. |
 | H4 | Prompts in one `prompts.py` | §5.6 | Done | Yes | Yes | Yes | Every prompt and the fence helper are in `prompts.py`; the span schema moved to `privacy.py` beside the other schemas. A pure move: all 13 requests the gateway sends were compared before and after and are byte for byte the same. |
 | L1 | Acceptance checks on real photos (F1, F2, F3) | §4 | In Progress | No | Yes | Yes | Run on the four generated samples on 27 Oct, 40 calls (§14): F1, F3 and F7 pass, F2 partly. Still open: real phone photos, real signatures, and F1c. Needs 2 to 3 photos and a go on calls. |
 | L2 | Evaluation sheet | §6 | In Progress | No | Yes | Yes | Numbers for the four generated samples are in §14 and the README. Real-photo numbers wait on photos. |

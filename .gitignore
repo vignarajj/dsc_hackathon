@@ -5,3 +5,4 @@ backend/.env
 **/.pytest_cache/
 **/.ruff_cache/
 **/*.pyc
+.idea/
