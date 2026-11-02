@@ -11,6 +11,10 @@ It was built for the Meta Global AI Developer Hackathon, Indie track, on the the
 
 **Try it:** https://dsc-hackathon.vercel.app is a public test copy (the page on Vercel, the API on Render's Free plan). The API sleeps when idle, so the first request after a quiet spell can take a minute. The copy allows 10 requests a minute across all visitors, has region descriptions and text hiding in the picture turned off, and comes down after judging.
 
+On a phone (a Pixel 3, sped up): pick the signed form, clean it, and compare the share-safe copy, where the photo and the signature are hidden.
+
+![A clean on a Pixel 3: choose the signed form, clean it, then drag the share-safe slider](docs/phone-demo.gif)
+
 ## What you can do
 
 1. Choose or drop a JPEG or PNG up to 10 MB, or click one of the four sample pages.
@@ -41,6 +45,9 @@ There is no account system, no saved history, and no multi-page document support
 | `docs/screenshot.png` | The upload page, shown at the top of this file. |
 | `docs/DEPLOY.md` | How to deploy a public copy, and the checks to run first. |
 | `docs/LAUNCH.md` | What is left before submission, with a status tracker. |
+| `docs/DEMO.md` | The shot list and checklist for recording the demo on the public copy. |
+| `docs/SUBMISSION.md` | The About text, the portal text, and the steps that make the repo public. |
+| `docs/phone-demo.gif` | A clean on a Pixel 3, shown at the top of this file. |
 | `backend/Dockerfile`, `render.yaml`, `frontend/vercel.json` | The API image, the Render blueprint for it, and the Vercel settings for the page. |
 | `.github/workflows/ci.yml` | Backend, frontend, and browser checks on every push and pull request. |
 

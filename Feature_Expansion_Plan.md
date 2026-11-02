@@ -583,3 +583,10 @@ samples and the generated receipt, about 50 calls: 5 of 5 pages passed, with
 its 73.6 s earlier was not mostly that step; which step is slow on it was not
 measured. GitHub CI is green on `main`, including the browser tests, which
 could not start locally because another process held port 3100.
+
+**Phone recording (2 Nov, about 9 calls).** A Pixel 3 screen recording of a full
+clean of the signed form on the public copy (71.6 s, cut and sped up to an
+18 s GIF, `docs/phone-demo.gif`). The page's step list, the Overview, and the
+Share-safe slider with the photo and signature hidden all showed on the phone.
+The raw recording is not in the repo.
+
