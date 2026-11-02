@@ -51,7 +51,7 @@ export function Overview({
       className="flex flex-col gap-4 rounded-3xl border border-line bg-paper p-5"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 id="overview" className="font-display text-2xl font-normal">
+        <h2 id="overview" className="text-xl font-semibold tracking-tight">
           Regions
         </h2>
         <button

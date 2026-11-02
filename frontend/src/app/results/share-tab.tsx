@@ -61,7 +61,7 @@ export function ShareTab({
       className="flex flex-col gap-5 rounded-3xl border border-line bg-paper p-5"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 id="share-safe" className="font-display text-2xl font-normal">
+        <h2 id="share-safe" className="text-xl font-semibold tracking-tight">
           Share-safe copy
         </h2>
         {notice ? (

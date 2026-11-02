@@ -1,6 +1,9 @@
 @import "tailwindcss";
 
+/* Light is the default. "Auto" follows the system; a stored choice sets
+   data-theme on <html> (see theme-toggle.tsx and the script in layout.tsx). */
 :root {
+  color-scheme: light dark;
   --background: #f3efe6;
   --foreground: #1c1915;
   --paper: #faf7f1;
@@ -20,11 +23,10 @@
   --color-stamp-ink: var(--stamp-ink);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --font-display: var(--font-fraunces);
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --background: #12110f;
     --foreground: #f3efe6;
     --paper: #1c1a17;
@@ -33,6 +35,21 @@
     --stamp: #e4b7ae;
     --stamp-ink: #1c1915;
   }
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #12110f;
+  --foreground: #f3efe6;
+  --paper: #1c1a17;
+  --line: #3a342c;
+  --muted: #b7aea2;
+  --stamp: #e4b7ae;
+  --stamp-ink: #1c1915;
 }
 
 body {

@@ -27,6 +27,7 @@ import { Overview } from "./results/overview";
 import { ResultTabs } from "./results/result-tabs";
 import { ShareTab } from "./results/share-tab";
 import { TextTab } from "./results/text-tab";
+import { ThemeToggle } from "./theme-toggle";
 
 type Status = "idle" | "loading" | "done" | "error";
 
@@ -97,8 +98,25 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
   const [extract, setExtract] = useState(true);
   const [describe, setDescribe] = useState(false);
   const inFlight = useRef<AbortController | null>(null);
+  const actionsRef = useRef<HTMLDivElement>(null);
+  const resultsRef = useRef<HTMLElement>(null);
 
   useEffect(() => () => inFlight.current?.abort(), []);
+
+  // The form is long, so bring the progress and then the result into view
+  // instead of leaving them below the fold.
+  useEffect(() => {
+    const target =
+      status === "done" ? resultsRef.current : status === "idle" ? null : actionsRef.current;
+    if (!target) {
+      return;
+    }
+    const calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    target.scrollIntoView({
+      behavior: calm ? "auto" : "smooth",
+      block: status === "done" ? "start" : "center",
+    });
+  }, [status]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -267,14 +285,12 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
         <p className="text-[11px] font-medium tracking-[0.22em] text-muted uppercase">
           Document screenshot cleaner
         </p>
-        <p className="text-xs text-muted">
-          SAM 3.1 finds the regions. Muse reads the page, fixes the text, and pulls out the data.
-        </p>
+        <ThemeToggle />
       </header>
 
-      <div className="mt-10 grid items-end gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+      <div className="mt-8 grid items-start gap-8 sm:mt-10 sm:gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
         <div className="flex flex-col gap-5">
-          <h1 className="font-display max-w-xl text-5xl leading-[0.95] font-normal tracking-tight text-balance sm:text-6xl">
+          <h1 className="max-w-xl text-4xl leading-[1.05] font-semibold tracking-tight text-balance sm:text-5xl">
             A messy page, read cleanly.
           </h1>
           <p className="max-w-md text-[15px] leading-relaxed text-muted">
@@ -291,7 +307,7 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
           <ol className="mt-4 grid gap-3 sm:grid-cols-2">
             {STEPS.map((step, index) => (
               <li key={step} className="rounded-2xl border border-line bg-paper px-4 py-3">
-                <span className="font-display text-lg text-stamp">{index + 1}</span>
+                <span className="text-lg font-semibold text-stamp">{index + 1}</span>
                 <p className="mt-1 text-sm leading-relaxed text-muted">{step}</p>
               </li>
             ))}
@@ -299,7 +315,7 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
         </section>
       </div>
 
-      <form onSubmit={onSubmit} className="mt-10 flex flex-col gap-4" aria-busy={status === "loading"}>
+      <form onSubmit={onSubmit} className="mt-10 flex flex-col gap-6" aria-busy={status === "loading"}>
         <label
           onDragOver={(event) => {
             event.preventDefault();
@@ -364,6 +380,7 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
           </ul>
         </div>
 
+        <div className="flex flex-col gap-6 rounded-3xl border border-line bg-paper/50 p-5 sm:p-6">
         <fieldset disabled={status === "loading"} className="flex flex-col gap-3">
           <legend className="text-sm font-medium">Regions to mark</legend>
           <div className="flex flex-wrap gap-2">
@@ -557,11 +574,13 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
           </p>
         ) : null}
 
-        <div className="flex flex-wrap items-center gap-3">
+        </div>
+
+        <div ref={actionsRef} className="flex flex-wrap items-center gap-3 scroll-mt-6">
           <button
             type="submit"
             disabled={!file || status === "loading"}
-            className="rounded-full border border-stamp bg-stamp px-5 py-2.5 text-sm font-medium text-stamp-ink disabled:cursor-not-allowed disabled:border-line disabled:bg-transparent disabled:text-muted"
+            className="w-full rounded-full border border-stamp bg-stamp px-6 py-3 text-sm font-medium text-stamp-ink disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
           >
             {status === "loading" ? "Cleaning…" : "Clean screenshot"}
           </button>
@@ -569,10 +588,13 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
             <button
               type="button"
               onClick={cancelClean}
-              className="rounded-full border border-line px-5 py-2.5 text-sm font-medium"
+              className="rounded-full border border-line px-6 py-3 text-sm font-medium"
             >
               Cancel
             </button>
+          ) : null}
+          {!file && status !== "loading" ? (
+            <p className="text-sm text-muted">Choose a file or a sample to start.</p>
           ) : null}
         </div>
       </form>
@@ -611,7 +633,7 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
       ) : null}
 
       {status === "done" && result && previewUrl ? (
-        <section className="mt-10 flex flex-col gap-6">
+        <section ref={resultsRef} className="mt-10 flex scroll-mt-6 flex-col gap-6">
           {result.warnings.length > 0 ? (
             <ul
               aria-label="Notes about this result"
@@ -675,7 +697,6 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
 
       <footer className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-line pt-16 text-xs text-muted">
         <p>JPEG or PNG, up to 10 MB, one image at a time. Nothing you upload is stored.</p>
-        <p>SAM 3.1 marks the regions. Muse reads the words.</p>
       </footer>
     </main>
   );

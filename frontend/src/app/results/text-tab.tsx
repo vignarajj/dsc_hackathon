@@ -82,7 +82,7 @@ function Reading({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="font-display text-2xl font-normal">Cleaned text</h2>
+        <h2 className="text-xl font-semibold tracking-tight">Cleaned text</h2>
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"

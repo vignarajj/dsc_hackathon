@@ -59,7 +59,7 @@ export function DataTab({
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
-          <h2 id="document-data" className="font-display text-2xl font-normal">
+          <h2 id="document-data" className="text-xl font-semibold tracking-tight">
             Document data
           </h2>
           <span className="rounded-full border border-stamp/40 px-3 py-0.5 text-[11px] font-medium tracking-[0.12em] text-stamp uppercase">
