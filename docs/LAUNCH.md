@@ -13,7 +13,7 @@ submission 3 Nov, 4 Nov as buffer.
 | # | Item | Owner | Needs | Target | Status | Notes |
 |---|------|-------|-------|--------|--------|-------|
 | 1 | Merge the feature work into `main` | You | Green CI | 27 Oct | Done | [vignarajj/dsc_hackathon#1](https://github.com/vignarajj/dsc_hackathon/pull/1), rebase-merged as 17 commits; `main` at `07a4401`. Backend, frontend, e2e, and GitGuardian passed on the PR; e2e passed on GitHub for the first time. On 27 Oct the launch tracker and the live-run results were pushed to `main` as a fast-forward (`c3f5678`), so `main` now matches the working branch. |
-| 2 | Live session: real-photo checks and evaluation | You, with photos | 2–3 phone photos of signed pages and 1 with a passport-style photo, no real personal data; a go on more calls | 31 Oct | In Progress | Four-sample run done on 27 Oct with a 40-call cap (all 40 used, none failed): 4 of 4 pages pass; results in the expansion plan §14. Still needed: real photos, real signatures, F1c, and region descriptions. |
+| 2 | Live session: real-photo checks and evaluation | You, with photos | 2–3 phone photos of signed pages and 1 with a passport-style photo, no real personal data; a go on more calls | 31 Oct | In Progress | Four-sample run done on 27 Oct with a 40-call cap (all 40 used, none failed): 4 of 4 pages pass; results in the expansion plan §14. Second run on 2 Nov, no photos available, 28 of 35 calls: a generated receipt, F1c, region descriptions and the QR code all pass (§15). Real photos and real signatures stay unmeasured and are left out of the submission claims. |
 | 3 | Deploy a public copy | You | Render and Vercel accounts, the Meta key | 1 Nov | Not Started | Follow `docs/DEPLOY.md`. The first Render build is also the first real build of `backend/Dockerfile`. |
 | 4 | Demo video and final README | You | Items 2 and 3 done | 2 Nov | Not Started | Script in the expansion plan §9. |
 | 5 | Repo public, About section, submit | You | Items 3 and 4 done | 3 Nov | Not Started | The GitHub description still describes the first version. |
@@ -49,6 +49,12 @@ F3, and F7 pass, and F2 passes in part (the logo mark was found, but a stamp
 was also boxed as a logo). The overlay stays PNG. Left for real photos: the
 signature check on real handwriting, whether F1c can be turned on, whether
 region descriptions should be on by default, and a receipt.
+
+Second run (2 Nov, 28 calls, still generated pages): the receipt, F1c and
+region descriptions pass, and "QR code" is found; see the expansion plan §15.
+F1c stays off by default, since it adds 16 to 29 s and clips field labels, and
+descriptions stay off by default on the page. Real handwritten signatures and
+real phone photos remain unmeasured.
 
 Done when: the checks above pass or each failure is written down with what
 was changed or cut, and the decisions are recorded in the expansion plan.

@@ -100,7 +100,9 @@ Measured on 27 Oct 2026 with the real models on the four sample pages in `fronte
 - "Logo" found the logo mark but also boxed a round stamp as a logo.
 - A page took 9 to 17 seconds, and a question about the page about 2 seconds.
 
-Not yet measured: real phone photos, real handwritten signatures, text hidden inside the picture (off by default), and region descriptions. `backend/scripts/smoke.py` repeats the page checks. The full table is in `Feature_Expansion_Plan.md` §14.
+On 2 Nov, a generated receipt also passed (type right, 17 of 17 fields found in the text). With text hiding in the picture turned on, the signed form's 7 sensitive values were all blacked out, at a cost of 16 to 29 s and some clipped field labels, so it stays off by default. Region descriptions came back for all three regions, and "QR code" found the QR code on the invoice.
+
+Not yet measured: real phone photos and real handwritten signatures. `backend/scripts/smoke.py` repeats the page checks. The full table is in `Feature_Expansion_Plan.md` §14.
 
 ## Requirements
 

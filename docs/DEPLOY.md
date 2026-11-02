@@ -56,7 +56,8 @@ for its proxy range.
 ## 2. The page on Vercel
 
 1. In Vercel, import this repository and set the root directory to
-   `frontend`. `frontend/vercel.json` sets the framework, the pnpm install,
+   `frontend`. `frontend/vercel.json` sets the framework, the pnpm install (pinned with
+   `npx pnpm@11.5.2`, since Vercel's own pnpm 9 rejects `pnpm-workspace.yaml`),
    and the build command.
 2. Add the environment variable `NEXT_PUBLIC_API_BASE_URL` with the API URL
    from step 1, for example `https://dsc-api.onrender.com`. It is read at build

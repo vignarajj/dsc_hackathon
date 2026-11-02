@@ -411,7 +411,7 @@ otherwise; checks on real photos are tracked as their own rows.
 | H2 | Server-side feature flags | §5.3 | Done | Yes | Yes | Yes | `FEATURE_EXTRACT`, `FEATURE_DESCRIBE`, `FEATURE_PRIVACY`, default on; image text keeps `REDACT_IMAGE_TEXT`. `GET /api/config` lets the page mark options that are off. |
 | H3 | Live smoke script (`backend/scripts/smoke.py`) | §6 | Done | Yes | Yes | Yes | Tested against the fake gateway; run live on 27 Oct (§14). Sends nothing without `--yes`. `--describe` adds region descriptions, `--delay` stays under a rate limit, and a page named `receipt` gets receipt checks. Its table feeds L1 and L2. |
 | H4 | Prompts in one `prompts.py` | §5.6 | Done | Yes | Yes | Yes | Every prompt and the fence helper are in `prompts.py`; the span schema moved to `privacy.py` beside the other schemas. A pure move: all 13 requests the gateway sends were compared before and after and are byte for byte the same. |
-| L1 | Acceptance checks on real photos (F1, F2, F3) | §4 | In Progress | No | Yes | Yes | Run on the four generated samples on 27 Oct, 40 calls (§14): F1, F3 and F7 pass, F2 partly. Still open: real phone photos, real signatures, and F1c. Needs 2 to 3 photos and a go on calls. |
+| L1 | Acceptance checks on real photos (F1, F2, F3) | §4 | In Progress | No | Yes | Yes | Run on the four generated samples on 27 Oct, 40 calls (§14): F1, F3 and F7 pass, F2 partly. A second run on 2 Nov, 28 calls (§15): receipt, F1c, descriptions and the QR code pass. Still open: real phone photos and real signatures. |
 | L2 | Evaluation sheet | §6 | In Progress | No | Yes | Yes | Numbers for the four generated samples are in §14 and the README. Real-photo numbers wait on photos. |
 | R1a | Deploy configs: `backend/Dockerfile`, `render.yaml`, `frontend/vercel.json`, `docs/DEPLOY.md` | §8 | Done | No | Yes | Yes | The image's install and start commands were run outside a container (no base image could be pulled here), and the container was not built. `FORWARDED_ALLOW_IPS` trusts private ranges only; `*` would let visitors skip the rate limit. |
 | R1b | Deploy, rate limit, spend alert, streaming through the host | §8 | Not Started | No | No | No | Needs Render and Vercel accounts and the key; follow `docs/DEPLOY.md`. |
@@ -475,3 +475,50 @@ Real photos at 2048 px compress worse, so this is rechecked on them.
 **Not covered by this run:** real phone photos, real handwritten signatures,
 F1c, region descriptions, a receipt, and streaming through a host. They need
 photos and more calls; tracked in `docs/LAUNCH.md`.
+
+---
+
+## 15. Second live run: receipt, F1c, descriptions, QR code (2 Nov 2026)
+
+**Setup.** No phone photos were available, so this run used a generated
+receipt (invented store and customer, rotated and noised like a photo, 1240 x
+1800), the signed form, and the invoice. The real API and key ran behind a
+throwaway launcher that counted every model call and refused any past a cap of
+35, with `REDACT_IMAGE_TEXT=true`. It used 28 calls; none failed and none was
+refused.
+
+| Check | Calls | Result |
+|---|---|---|
+| Receipt through `smoke.py --ask` | 11 | Pass. Type `receipt`, 17 of 17 fields found in the text, 4 kinds of personal details masked, "What was the total?" gave 21.32. 2 warnings were not inspected. 73.6 s, see below. |
+| Signed form, F1c and descriptions on | 13 | F1c pass: all 7 sensitive values (name, date of birth, phone, email, address, passport number, "R. Shah") are blacked out in the picture, and the signature and photo are hidden. No warnings. |
+| "QR code" on the invoice | 4 | Pass. Found with score 0.97, a tight box, next to the stamp (0.90). |
+| EXIF and GPS, fake gateway | 0 | Pass. A JPEG with GPS and camera tags gave a share-safe PNG and an overlay with no metadata. |
+
+**Region descriptions** (3 calls on the form): all three regions came back
+with a short description and no warning, and none names or guesses a person
+("Cartoon smiling face with dark hair, blue shirt, light background").
+
+**What F1c costs.** It adds one call after the personal-details step, so it
+runs in sequence: 16.1 s on the form and 28.7 s on the receipt. The form took
+48.1 s end to end with descriptions and F1c (15.8 s on 27 Oct without them).
+The receipt took 73.6 s, which also had a 37.3 s personal-details call (median
+4.9 s on 27 Oct). The boxes are wider than the words, so they cover the
+labels beside the values: parts of "Full name", "Date of birth", "Phone",
+"Email", "Address", "Passport no." and the "Checked by" header were clipped.
+Nothing sensitive was left readable on the form. The receipt's picture was not
+saved, so its F1c output was not looked at.
+
+**Time per call** (28 calls, in seconds): segment 1.9 to 4.1 (10 calls),
+transcribe 7.4 to 13.8, proofread 4.3 to 6.0, extract 9.9 to 10.9, personal
+details 7.9 and 37.3, signature lookup 4.5 and 6.1, descriptions 5.3 to 14.8,
+text boxes 16.1 and 28.7, ask 2.9.
+
+**Decisions.**
+- F1c stays off by default and on the public copy: it works on the generated
+  form, but adds 16 to 29 s and clips labels. It is not checked on real photos.
+- Region descriptions work and stay off by default on the page, to save up to
+  8 calls per image.
+- The QR code prompt is safe to use in the demo.
+
+**Still not covered:** real phone photos, real handwritten signatures, F1c on
+a receipt's picture, and streaming through a host.
