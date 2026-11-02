@@ -3,7 +3,7 @@
 [![CI](https://github.com/vignarajj/dsc_hackathon/actions/workflows/ci.yml/badge.svg)](https://github.com/vignarajj/dsc_hackathon/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-![The upload page](docs/screenshot.png)
+![The upload page in the light theme](docs/screenshot.png)
 
 People photograph IDs, forms, and bank slips and send them over chat every day, signatures, faces, and account numbers included. Drop the photo in. SAM 3.1 finds the signature, the photo, the stamp, or anything you name. Muse reads the page, fixes it, pulls out the fields, and spots the phone numbers and ID numbers. One click gives you a copy that is safe to share.
 
@@ -11,7 +11,7 @@ It was built for the Meta Global AI Developer Hackathon, Indie track, on the the
 
 **Try it:** https://dsc-hackathon.vercel.app is a public test copy (the page on Vercel, the API on Render's Free plan). The API sleeps when idle, so the first request after a quiet spell can take a minute. The copy allows 10 requests a minute across all visitors, has region descriptions and text hiding in the picture turned off, and comes down after judging.
 
-On a phone (a Pixel 3, sped up): pick the signed form, clean it, and compare the share-safe copy, where the photo and the signature are hidden.
+On a phone (a Pixel 3, sped up): pick the signed form, clean it, compare the share-safe copy, where the photo and the signature are hidden, then switch the theme from dark to light.
 
 ![A clean on a Pixel 3: choose the signed form, clean it, then drag the share-safe slider](docs/phone-demo.gif)
 
@@ -27,7 +27,29 @@ On a phone (a Pixel 3, sped up): pick the signed form, clean it, and compare the
    - **Data**: the document type, a summary, and key fields, each marked when its value is not in the text. Download JSON or CSV.
    - **Share-safe**: the hidden copy under a before/after slider, with no location or camera data, and the text with personal details replaced by `[PHONE]`, `[NAME]`, and so on.
 
+6. Pick the colour theme with the Auto / Light / Dark control at the top right. Auto follows the system; a choice is remembered in the browser. The page scrolls to the progress when a clean starts and to the result when it ends.
+
 There is no account system, no saved history, and no multi-page document support. Nothing you upload is stored.
+
+## Screenshots
+
+Taken on 2 Nov 2026 from the public copy, with the real models, on the signed form sample. The page is shown in the light and the dark theme; the phone shots were taken at 390 px wide.
+
+![A clean on the desktop: choose the sample, watch the steps, read the result, and switch tabs](docs/ui-session.gif)
+
+| Light | Dark |
+|---|---|
+| ![The upload page, light](docs/screenshots/desktop-landing-light.png) | ![The upload page, dark](docs/screenshots/desktop-landing-dark.png) |
+| ![Overview: the regions SAM found, under a slider](docs/screenshots/desktop-overview-light.png) | ![Share-safe: the photo and signature hidden, under a slider](docs/screenshots/desktop-share-safe-dark.png) |
+| ![Data: the document type and key fields](docs/screenshots/desktop-data-light.png) | ![Share-safe, light](docs/screenshots/desktop-share-safe-light.png) |
+
+On a phone:
+
+| Overview | Share-safe | Data, dark | Top of the page, dark |
+|---|---|---|---|
+| ![](docs/screenshots/phone-light-overview.png) | ![](docs/screenshots/phone-light-share-safe.png) | ![](docs/screenshots/phone-dark-data.png) | ![](docs/screenshots/phone-dark-landing.png) |
+
+A 38 second recording of the same desktop session is `demo/ui-session.webm`.
 
 ## What is in this repo
 
@@ -41,13 +63,15 @@ There is no account system, no saved history, and no multi-page document support
 | `frontend/e2e/` | Playwright tests of the built page against the fake API. |
 | `Document_Screenshot_Cleaner_SAM_Hackathon_Plan.md` | The original plan, phase tracker, and the F0 spike results (§5.1). |
 | `Feature_Expansion_Plan.md` | The feature expansion plan and its status tracker (§13). |
-| `demo/final-demo.webm`, `demo/happy-path.webm` | Earlier recordings, made before the feature expansion. |
-| `docs/screenshot.png` | The upload page, shown at the top of this file. |
+| `demo/final-demo.webm`, `demo/happy-path.webm` | Earlier recordings, made before the feature expansion and the new look. |
+| `demo/ui-session.webm` | A 38 second desktop session on the public copy with the current page. |
+| `docs/screenshot.png`, `docs/screenshots/` | The upload page, shown at the top of this file, and the screenshots in the Screenshots section. |
+| `docs/ui-session.gif` | The desktop session as a GIF, in the Screenshots section. |
 | `docs/DEPLOY.md` | How to deploy a public copy, and the checks to run first. |
 | `docs/LAUNCH.md` | What is left before submission, with a status tracker. |
 | `docs/DEMO.md` | The shot list and checklist for recording the demo on the public copy. |
 | `docs/SUBMISSION.md` | The About text, the portal text, and the steps that make the repo public. |
-| `docs/phone-demo.gif` | A clean on a Pixel 3, shown at the top of this file. |
+| `docs/phone-demo.gif` | A clean on a Pixel 3 and a theme switch, shown at the top of this file. |
 | `backend/Dockerfile`, `render.yaml`, `frontend/vercel.json` | The API image, the Render blueprint for it, and the Vercel settings for the page. |
 | `.github/workflows/ci.yml` | Backend, frontend, and browser checks on every push and pull request. |
 

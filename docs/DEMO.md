@@ -24,7 +24,7 @@ copy has region descriptions and text hiding in the picture turned off, so the
 
 | Time | Show | Say |
 |---|---|---|
-| 0 to 10 s | The page at the top, then the four samples. | "People photograph IDs, forms and bank slips and send them over chat every day, signature, face and account number included." |
+| 0 to 10 s | The page at the top, switch Dark then Light with the toggle at the top right, then the four samples. | "People photograph IDs, forms and bank slips and send them over chat every day, signature, face and account number included." |
 | 10 to 25 s | Click "Signed form with a photo", press Clean screenshot. The step list ticks. Cut or speed up the wait. | "SAM 3.1 finds the regions while Muse reads the page." |
 | 25 to 40 s | Overview tab. Drag the slider. Point at the stamp, signature and photo. | "SAM marks the stamp, the signature and the photo." |
 | 40 to 55 s | Data tab: the type, the summary, the fields. Click Download JSON. | "Muse turns the photo into data, and checks every field against the text." |
@@ -36,6 +36,11 @@ choose "Invoice with a PAID stamp", click "+ QR code", press Clean screenshot,
 and show the purple box on the QR code in the Overview. It costs another 9
 calls and 20 to 35 seconds, so cut the wait and splice it into the 25 to 40
 second slot.
+
+A reference recording of the current page, made with Playwright on the public
+copy, is `demo/ui-session.webm` (38 seconds; the waiting is sped up and the
+pink dot is a cursor added for the recording). The screenshots in the README
+were taken the same day, without the cursor.
 
 ## What to avoid
 

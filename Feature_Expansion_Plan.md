@@ -413,6 +413,7 @@ otherwise; checks on real photos are tracked as their own rows.
 | H4 | Prompts in one `prompts.py` | §5.6 | Done | Yes | Yes | Yes | Every prompt and the fence helper are in `prompts.py`; the span schema moved to `privacy.py` beside the other schemas. A pure move: all 13 requests the gateway sends were compared before and after and are byte for byte the same. |
 | L1 | Acceptance checks on real photos (F1, F2, F3) | §4 | In Progress | No | Yes | Yes | Run on the four generated samples on 27 Oct, 40 calls (§14): F1, F3 and F7 pass, F2 partly. A second run on 2 Nov, 28 calls (§15): receipt, F1c, descriptions and the QR code pass. Still open: real phone photos and real signatures. |
 | L2 | Evaluation sheet | §6 | In Progress | No | Yes | Yes | Numbers for the four generated samples are in §14 and the README. Real-photo numbers wait on photos. |
+| UI1 | UI polish: theme toggle, one font family, sea-blue and green palette, scroll to progress and result | §4 F6 | Done | Yes | Yes | Yes | `3430461`, `3ed9f03`. Auto / Light / Dark control with a stored choice and no flash; the serif font dropped; options grouped; the page scrolls to the progress and the result. 4 new browser tests (34 pass), e2e ports configurable. |
 | R1a | Deploy configs: `backend/Dockerfile`, `render.yaml`, `frontend/vercel.json`, `docs/DEPLOY.md` | §8 | Done | No | Yes | Yes | The image's install and start commands were run outside a container (no base image could be pulled here), and the container was not built. `FORWARDED_ALLOW_IPS` trusts private ranges only; `*` would let visitors skip the rate limit. |
 | R1b | Deploy, rate limit, spend alert, streaming through the host | §8 | In Progress | No | Yes | Yes | Live on 2 Nov: API on Render (Free, by hand), page on Vercel; streaming, CORS and the smoke test pass (§16). The limit is shared by all visitors, set to 10. Open: the spend alert on the key. |
 | R2 | Demo video and final README | §9, §12 | In Progress | No | Yes | No | README has the live link, the public-copy results, and the hosting section. Missing: the new demo video and a GIF. |
@@ -589,4 +590,39 @@ clean of the signed form on the public copy (71.6 s, cut and sped up to an
 18 s GIF, `docs/phone-demo.gif`). The page's step list, the Overview, and the
 Share-safe slider with the photo and signature hidden all showed on the phone.
 The raw recording is not in the repo.
+
+---
+
+## 17. UI review and a recorded session (2 Nov 2026)
+
+**What was found.** The page had a light and a dark palette but followed only the
+system setting, so on a Mac set to dark there was no light mode to see and no
+way to switch. It loaded three font families at once (a serif for headings,
+a sans for the interface, a mono for the text boxes). The hero had a large gap
+above the title on desktop; the tagline appeared in the header, the hero and
+the footer; the options were a long flat list; the Clean button looked
+disabled and gave no reason; and after pressing it the progress and the result
+sat below the whole form, out of view. The brown and cream colours were also
+judged plain, and the red accent clashed with the red "Stamp" region colour.
+
+**What changed.** An Auto / Light / Dark control in the header (a stored choice
+is set on `<html>` before the first paint); one sans family, with the mono kept
+only in the text boxes; one options card; a clear primary button with a hint when
+no file is chosen; scrolling to the progress and then the result; and a
+sea-blue accent with a green partner (every text and button pair at least 4.5:1)
+in a mist-white light theme and a deep-sea dark theme. A stale-CSS surprise on
+one local build (a changed stylesheet not rebuilt) was fixed by a clean build.
+
+**Checks.** Lint, typecheck, 64 unit tests, 200 backend tests, and 34 browser
+tests (17 on desktop, 17 on a 375 px phone) all pass, 4 of the 17 new. A manual
+Playwright pass checked the toggle, a stored choice, a stored Light on a dark
+system, the system setting, and the scroll, on desktop and a 390 px phone.
+
+**Recorded session on the public copy.** A Playwright run (video and
+screenshots) and a second pass for clean screenshots, then a Pixel 3 recording
+with Maestro: about 37 calls in all (10 for the video run with one question,
+9 for a phone-sized run, 9 for the screenshots, 9 for the Pixel). The results
+are in `demo/ui-session.webm`, `docs/ui-session.gif`, `docs/phone-demo.gif` and
+`docs/screenshots/`, and in the README. The new page went live on Vercel about
+30 seconds after each push.
 
