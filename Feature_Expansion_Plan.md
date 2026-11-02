@@ -522,3 +522,53 @@ text boxes 16.1 and 28.7, ask 2.9.
 
 **Still not covered:** real phone photos, real handwritten signatures, F1c on
 a receipt's picture, and streaming through a host.
+
+---
+
+## 16. Public copy checks (2 Nov 2026)
+
+**Setup.** The API on Render (Docker, Free instance, set up by hand from
+`backend/Dockerfile`) at `https://dsc-api-xxzv.onrender.com`, the page on Vercel
+at `https://dsc-hackathon.vercel.app`. Region descriptions and the text
+blackout in the picture are off. A cap of 45 model calls was agreed; the
+checks used about 43 (3 for the stream, about 40 for the smoke test).
+
+| Check | Result |
+|---|---|
+| `GET /api/health` and `/api/config` | Pass. `{"status":"ok"}` in 0.2 s; descriptions off, text blackout off. |
+| CORS | Pass. The page's origin is allowed; another origin gets "Disallowed CORS origin". |
+| Page points at the API | Pass. The built page carries the Render address, not `127.0.0.1`. |
+| Progress arrives line by line | Pass. 11 lines over 21.7 s through Render and its Cloudflare front, `content-type: application/x-ndjson`, `cache-control: no-cache`. |
+| Rate limit holds against a faked address | Pass. Fresh fake `X-Forwarded-For` values did not get past a tripped limit. |
+| Rate limit value | Off from the plan. Requests 4 to 6 of six bad uploads were 429, twice, after a 75 s quiet window, so the server allows 3 a minute, not the 5 the blueprint sets. The code only counts allowed requests, so the likeliest cause is `RATE_LIMIT_PER_MINUTE` being set to 3 on the service. Not read from the dashboard. |
+| `smoke.py --yes --ask --delay 21` | Pass, 4 of 4 pages: right types, 14, 11, 18 and 17 fields all found in the text, one question answered per page. |
+
+**Time.** 22.2 to 36.5 s per page with a question, against 8.7 to 17.1 s per
+page locally on 27 Oct. Render's Free instance, Cloudflare in front, and
+Meta's own latency all differ between the two runs; this was not separated.
+
+**Phone check (Pixel 3, LineageOS, Jelly browser, over Wi-Fi), driven with
+Maestro.** The page rendered at phone width in dark mode. A full clean of the
+invoice sample (about 9 calls) gave the Overview tab with the two "No ... was
+found, so none is hidden" notes, the Data tab (type, summary, 18 fields with
+Copy buttons), and the Share-safe tab (slider, download, shareable text with
+`[PHONE]` and `[EMAIL]`). Cancel appeared while a clean ran, and pressing it
+returned the page to "Clean screenshot" (about 6 calls started). The phone has
+no SIM, so it shared this machine's Wi-Fi and was not a second network.
+
+**Second-network check: failed (2 Nov, 13:27).** The Pixel was on an
+iPhone hotspot with public IP `106.217.113.69`; this Mac was on `103.169.237.202`.
+While the Mac kept its limit tripped with a bad upload every 12 s (400, 400,
+400, 429, 429, repeating), the phone pressed Clean and the page showed "Too many
+requests. Wait a minute and try again." The phone had sent no earlier request
+from that address. No model call was spent. So every visitor shares one limit on
+Render: the case `docs/DEPLOY.md` §1 warns about. The likely cause is that
+Render's proxy does not connect from the private ranges in
+`FORWARDED_ALLOW_IPS`, so `X-Forwarded-For` is not trusted and the proxy's
+address is the key. This fails safe for spend, but on the public copy a few
+requests a minute across all visitors is all anyone gets.
+
+**Still open:** a fix or a decision on the shared limit (raise
+`RATE_LIMIT_PER_MINUTE`, or key on the visitor with a header Render's front
+sets), the spend alert on the key, and why the limit is 3 and not 5.
+

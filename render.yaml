@@ -18,8 +18,9 @@ services:
       # The page's Vercel URL, for example https://dsc-cleaner.vercel.app
       - key: CORS_ORIGINS
         sync: false
+      # Shared by every visitor on Render today; see docs/DEPLOY.md.
       - key: RATE_LIMIT_PER_MINUTE
-        value: "5"
+        value: "10"
       # Region descriptions cost up to 8 calls per image; off on the public copy.
       - key: FEATURE_DESCRIBE
         value: "false"

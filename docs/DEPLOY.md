@@ -27,7 +27,7 @@ The blueprint sets these for a public copy:
 
 | Name | Value | Why |
 |---|---|---|
-| `RATE_LIMIT_PER_MINUTE` | `5` | Per visitor, for `/api/process` and `/api/ask` together. |
+| `RATE_LIMIT_PER_MINUTE` | `10` | For `/api/process` and `/api/ask` together. Meant per visitor, but on Render it is shared by everyone (see below). |
 | `FEATURE_DESCRIBE` | `false` | Region descriptions cost up to 8 calls per image. |
 | `FORWARDED_ALLOW_IPS` | `10.0.0.0/8,172.16.0.0/12,192.168.0.0/16` | So the rate limit sees each visitor's address. See below. |
 | `plan` | `starter` | A free instance sleeps and takes about a minute to wake. |
@@ -47,11 +47,17 @@ Never set `FORWARDED_ALLOW_IPS` to `*`. uvicorn then takes the leftmost
 address, which the visitor writes themselves, so anyone can send a new
 made-up address with each request and skip the limit.
 
-Check it after the deploy, with the six bad uploads in step 4: the sixth must
-be HTTP 429. Then try one from a second network at once; it must not be 429. If the second network is refused too, Render's proxy is not connecting
-from a private address and every visitor shares one limit. That fails safe
-(the key is still capped), but raise `RATE_LIMIT_PER_MINUTE` or ask Render
-for its proxy range.
+Check it after the deploy, with the bad uploads in step 4: the one after the
+limit must be HTTP 429. Then try one from a second network at once; it should
+not be 429. If the second network is refused too, Render's proxy is not
+connecting from a private address and every visitor shares one limit.
+
+That is what happened on 2 Nov: a phone on another network got 429 while the
+limit was tripped from this machine (expansion plan §16). It fails safe (the
+key is still capped), so the public copy runs with `RATE_LIMIT_PER_MINUTE=10`
+for everyone together, a spend alert on the key, and a take-down after
+judging. Keying on the visitor needs the address Render's front passes; that
+was not worked out.
 
 ## 2. The page on Vercel
 
@@ -86,18 +92,19 @@ curl -sN -H "accept: application/x-ndjson" \
   -F "image=@frontend/public/samples/invoice.jpg;type=image/jpeg" $API/api/process | cut -c1-80
 
 # The rate limit, with no model calls: the limit is checked before the upload
-# is, so six bad uploads give 400 five times and then 429. Wait a minute after
-# this before the smoke test, or it counts against the same limit.
-for i in 1 2 3 4 5 6; do
+# is, so with a limit of 10, eleven bad uploads give 400 ten times and then
+# 429. Wait a minute after this before the smoke test, or it counts against
+# the same limit.
+for i in $(seq 1 11); do
   curl -s -o /dev/null -w "$i: %{http_code}\n" \
     -F "image=not-an-image;filename=x.png;type=image/png" $API/api/process
 done
-# Expect 400 400 400 400 400 429. Run the loop again from a second network
-# within the minute; its first request must be 400, not 429.
+# Expect ten 400s, then 429. Run one from a second network within the minute;
+# it should be 400, not 429 (on Render today it is 429; see above).
 
 # The live smoke test: about 9 calls per page, 40 with --ask on the samples.
-# --delay 13 keeps it under RATE_LIMIT_PER_MINUTE=5, since each page and each
-# question counts as one request. Without it, the third page's question is 429.
+# --delay 13 keeps it under a limit of 5 a minute, since each page and each
+# question counts as one request. With a limit of 10 it is not needed.
 cd backend && uv run python scripts/smoke.py --yes --ask --delay 13 --base-url $API
 ```
 
