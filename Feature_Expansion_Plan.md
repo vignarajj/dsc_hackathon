@@ -414,8 +414,8 @@ otherwise; checks on real photos are tracked as their own rows.
 | L1 | Acceptance checks on real photos (F1, F2, F3) | §4 | In Progress | No | Yes | Yes | Run on the four generated samples on 27 Oct, 40 calls (§14): F1, F3 and F7 pass, F2 partly. A second run on 2 Nov, 28 calls (§15): receipt, F1c, descriptions and the QR code pass. Still open: real phone photos and real signatures. |
 | L2 | Evaluation sheet | §6 | In Progress | No | Yes | Yes | Numbers for the four generated samples are in §14 and the README. Real-photo numbers wait on photos. |
 | R1a | Deploy configs: `backend/Dockerfile`, `render.yaml`, `frontend/vercel.json`, `docs/DEPLOY.md` | §8 | Done | No | Yes | Yes | The image's install and start commands were run outside a container (no base image could be pulled here), and the container was not built. `FORWARDED_ALLOW_IPS` trusts private ranges only; `*` would let visitors skip the rate limit. |
-| R1b | Deploy, rate limit, spend alert, streaming through the host | §8 | Not Started | No | No | No | Needs Render and Vercel accounts and the key; follow `docs/DEPLOY.md`. |
-| R2 | Demo video and final README | §9, §12 | Not Started | No | No | No | |
+| R1b | Deploy, rate limit, spend alert, streaming through the host | §8 | In Progress | No | Yes | Yes | Live on 2 Nov: API on Render (Free, by hand), page on Vercel; streaming, CORS and the smoke test pass (§16). The limit is shared by all visitors, set to 10. Open: the spend alert on the key. |
+| R2 | Demo video and final README | §9, §12 | In Progress | No | Yes | No | README has the live link, the public-copy results, and the hosting section. Missing: the new demo video and a GIF. |
 | R3 | Repo public, submit on the portal | §12 | Not Started | No | No | No | Target 3 Nov. |
 | M1 | Merge into `main` | — | Done | Yes | Yes | Yes | vignarajj/dsc_hackathon#1, rebase-merged; `main` at `07a4401`. All CI jobs green, e2e for the first time on GitHub. |
 | M2 | Launch tracker and live-run results on `main` | — | Done | No | Yes | Yes | `docs/LAUNCH.md` and §14 pushed straight to `main` as a fast-forward (`c3f5678`), two docs-only commits. |
@@ -568,7 +568,18 @@ Render's proxy does not connect from the private ranges in
 address is the key. This fails safe for spend, but on the public copy a few
 requests a minute across all visitors is all anyone gets.
 
-**Still open:** a fix or a decision on the shared limit (raise
-`RATE_LIMIT_PER_MINUTE`, or key on the visitor with a header Render's front
-sets), the spend alert on the key, and why the limit is 3 and not 5.
+**Decision and check (2 Nov).** `RATE_LIMIT_PER_MINUTE` was raised to 10 on the
+service, shared by all visitors. Twelve bad uploads then gave ten 400s and two
+429s, so the service honours the value; the earlier limit of 3 was whatever it
+was set to then. Health and the CORS preflight still pass.
 
+**Still open:** the spend alert on the key, and keying the limit on the visitor
+(not worked out; the shared limit is the accepted trade-off).
+
+**Rerun on the public copy (2 Nov, later).** `smoke.py --yes --ask` on the four
+samples and the generated receipt, about 50 calls: 5 of 5 pages passed, with
+20, 13, 10, 10 and 17 fields found in the text, one correct answer each, and
+15.8 to 68.6 s a page. The receipt took 68.6 s with the text blackout off, so
+its 73.6 s earlier was not mostly that step; which step is slow on it was not
+measured. GitHub CI is green on `main`, including the browser tests, which
+could not start locally because another process held port 3100.

@@ -36,6 +36,27 @@ Every other setting keeps its default; the root README lists them. Set
 `FEATURE_EXTRACT=false` or `FEATURE_PRIVACY=false` to cut further.
 `REDACT_IMAGE_TEXT` stays off until it is checked on real photos.
 
+### Without a card: a Web Service made by hand
+
+Render asked for payment details before it would create the Blueprint above.
+The same service can be made by hand on the Free instance type (this is how
+the 2 Nov public copy was made):
+
+1. New, then Web Service, and pick this repository, branch `main`.
+2. Language Docker. Leave Root Directory empty. Set Dockerfile Path to
+   `./backend/Dockerfile` and Docker Build Context Directory to `./backend`.
+   Setting Root Directory to `backend` as well stacks the two paths, Render
+   sends an empty folder, and the build stops at `COPY src ./src` with
+   `"/src": not found`.
+3. Instance Type Free. Under Advanced, Health Check Path `/api/health`, and
+   Auto-Deploy off.
+4. Add the environment variables from the table above, by hand:
+   `META_API_KEY`, `CORS_ORIGINS`, `RATE_LIMIT_PER_MINUTE`, `FEATURE_DESCRIBE`,
+   and `FORWARDED_ALLOW_IPS`.
+
+A Free instance sleeps after about 15 minutes idle and takes about a minute to
+wake, so open `/api/health` a few minutes before recording or submitting.
+
 ### The rate limit behind a proxy
 
 Render's proxy forwards each request and appends the visitor's address to
@@ -69,6 +90,8 @@ was not worked out.
    from step 1, for example `https://dsc-api.onrender.com`. It is read at build
    time, so redeploy after changing it.
 3. Deploy, and note the page URL, for example `https://dsc-cleaner.vercel.app`.
+   Use the short production address, not the long per-deployment one, when
+   you set `CORS_ORIGINS`. Set the project's Node.js version to 24.x, as in CI.
 
 ## 3. Connect them
 

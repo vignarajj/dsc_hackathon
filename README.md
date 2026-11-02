@@ -9,6 +9,8 @@ People photograph IDs, forms, and bank slips and send them over chat every day, 
 
 It was built for the Meta Global AI Developer Hackathon, Indie track, on the theme Build for Your World.
 
+**Try it:** https://dsc-hackathon.vercel.app is a public test copy (the page on Vercel, the API on Render's Free plan). The API sleeps when idle, so the first request after a quiet spell can take a minute. The copy allows 10 requests a minute across all visitors, has region descriptions and text hiding in the picture turned off, and comes down after judging.
+
 ## What you can do
 
 1. Choose or drop a JPEG or PNG up to 10 MB, or click one of the four sample pages.
@@ -100,9 +102,11 @@ Measured on 27 Oct 2026 with the real models on the four sample pages in `fronte
 - "Logo" found the logo mark but also boxed a round stamp as a logo.
 - A page took 9 to 17 seconds, and a question about the page about 2 seconds.
 
+On 2 Nov the same checks ran against the public copy: 5 of 5 pages passed, the four samples and the generated receipt, each with the right type, every field found in the text, and a correct answer to one question. A page took 16 to 69 seconds there (the receipt was the slowest at 69 s), slower than on a local API; the Free instance, Render's front, and the model service were not told apart. A Pixel 3 on the page's phone layout ran a full clean through all four tabs, and Cancel returned the page to idle.
+
 On 2 Nov, a generated receipt also passed (type right, 17 of 17 fields found in the text). With text hiding in the picture turned on, the signed form's 7 sensitive values were all blacked out, at a cost of 16 to 29 s and some clipped field labels, so it stays off by default. Region descriptions came back for all three regions, and "QR code" found the QR code on the invoice.
 
-Not yet measured: real phone photos and real handwritten signatures. `backend/scripts/smoke.py` repeats the page checks. The full table is in `Feature_Expansion_Plan.md` §14.
+Not yet measured: real phone photos and real handwritten signatures. `backend/scripts/smoke.py` repeats the page checks (add `--describe` for region descriptions, `--delay SECONDS` behind a rate limit, and name a photo `receipt.jpg` to check it as a receipt). The full table is in `Feature_Expansion_Plan.md` §14.
 
 ## Requirements
 
@@ -175,13 +179,13 @@ None of these call Meta or need a key. `backend/scripts/smoke.py` is the live ch
 
 ## Hosting
 
-Nothing in this repo is deployed yet. [`docs/DEPLOY.md`](docs/DEPLOY.md) walks through a public copy: the API from `backend/Dockerfile` on Render (`render.yaml`), and the page on Vercel (`frontend/vercel.json`), with the checks to run before sharing the URL.
+A public test copy runs at https://dsc-hackathon.vercel.app, with the API on Render. [`docs/DEPLOY.md`](docs/DEPLOY.md) walks through making one: the API from `backend/Dockerfile` on Render (`render.yaml`, or a Web Service made by hand if Render asks for a card for a Blueprint), and the page on Vercel (`frontend/vercel.json`), with the checks to run before sharing the URL.
 
 ```bash
 cd backend && docker build -t dsc-api . && docker run -p 8000:8000 -e META_API_KEY=... dsc-api
 ```
 
-A public test needs the API and the page on hosts that can hold a request for up to three minutes and pass a streamed response through without buffering it. Put `META_API_KEY` in the API host's environment, not in git. Set `CORS_ORIGINS` to the page's origin, and set `NEXT_PUBLIC_API_BASE_URL` to the API's public URL at build time. The API has no login. Anyone who can reach a public copy can spend the Meta key. Set `RATE_LIMIT_PER_MINUTE` (for example `5`) on a public copy, and a spend alert on the key. To cap the calls further, turn off `FEATURE_DESCRIBE` (up to 8 calls per image) or the other feature switches. The limit is kept in memory for one process. Behind a proxy, set `FORWARDED_ALLOW_IPS` to the proxy's addresses (the image passes `--proxy-headers`) so the limit sees each visitor's address instead of the proxy's. Never set it to `*`: a visitor could then fake an address and skip the limit. Take the URL down when judging is over.
+A public test needs the API and the page on hosts that can hold a request for up to three minutes and pass a streamed response through without buffering it. Put `META_API_KEY` in the API host's environment, not in git. Set `CORS_ORIGINS` to the page's origin, and set `NEXT_PUBLIC_API_BASE_URL` to the API's public URL at build time. The API has no login. Anyone who can reach a public copy can spend the Meta key. Set `RATE_LIMIT_PER_MINUTE` (for example `10`) on a public copy, and a spend alert on the key. To cap the calls further, turn off `FEATURE_DESCRIBE` (up to 8 calls per image) or the other feature switches. The limit is kept in memory for one process. Behind a proxy, set `FORWARDED_ALLOW_IPS` to the proxy's addresses (the image passes `--proxy-headers`) so the limit sees each visitor's address instead of the proxy's. Never set it to `*`: a visitor could then fake an address and skip the limit. On Render the limit was measured to be shared by all visitors anyway (a phone on another network was refused while another machine's limit was tripped), so the public copy sets it to 10 for everyone together; `docs/DEPLOY.md` has the details. Take the URL down when judging is over.
 
 ## More detail
 
