@@ -282,14 +282,14 @@ test("the colour theme can be set, and the choice is kept", async ({ page }) => 
 
   await dark.click();
   await expect(html).toHaveAttribute("data-theme", "dark");
-  await expect(page.locator("body")).toHaveCSS("background-color", "rgb(18, 17, 15)");
+  await expect(page.locator("body")).toHaveCSS("background-color", "rgb(7, 26, 32)");
 
   await page.reload();
   await expect(html).toHaveAttribute("data-theme", "dark");
   await expect(dark).toHaveAttribute("aria-pressed", "true");
 
   await page.getByRole("button", { name: "Light" }).click();
-  await expect(page.locator("body")).toHaveCSS("background-color", "rgb(243, 239, 230)");
+  await expect(page.locator("body")).toHaveCSS("background-color", "rgb(238, 246, 247)");
 
   await auto.click();
   await expect(html).not.toHaveAttribute("data-theme", /.*/);
@@ -300,15 +300,15 @@ test("a stored theme beats the system setting before the page loads", async ({ p
   await page.addInitScript(() => window.localStorage.setItem("theme", "light"));
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-  await expect(page.locator("body")).toHaveCSS("background-color", "rgb(243, 239, 230)");
+  await expect(page.locator("body")).toHaveCSS("background-color", "rgb(238, 246, 247)");
 });
 
 test("with no stored theme the page follows the system setting", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "dark" });
   await page.goto("/");
-  await expect(page.locator("body")).toHaveCSS("background-color", "rgb(18, 17, 15)");
+  await expect(page.locator("body")).toHaveCSS("background-color", "rgb(7, 26, 32)");
   await page.emulateMedia({ colorScheme: "light" });
-  await expect(page.locator("body")).toHaveCSS("background-color", "rgb(243, 239, 230)");
+  await expect(page.locator("body")).toHaveCSS("background-color", "rgb(238, 246, 247)");
 });
 
 test("the result is brought into view when a clean finishes", async ({ page }) => {

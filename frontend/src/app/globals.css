@@ -1,16 +1,18 @@
 @import "tailwindcss";
 
 /* Light is the default. "Auto" follows the system; a stored choice sets
-   data-theme on <html> (see theme-toggle.tsx and the script in layout.tsx). */
+   data-theme on <html> (see theme-toggle.tsx and the script in layout.tsx).
+   --stamp is the sea-blue accent and --accent-2 its green partner. */
 :root {
   color-scheme: light dark;
-  --background: #f3efe6;
-  --foreground: #1c1915;
-  --paper: #faf7f1;
-  --line: #e3d9c8;
-  --muted: #6e675e;
-  --stamp: #8c2f2d;
-  --stamp-ink: #faf7f1;
+  --background: #eef6f7;
+  --foreground: #0f2a33;
+  --paper: #fbfefe;
+  --line: #c9e0e4;
+  --muted: #4a6770;
+  --stamp: #0b6f86;
+  --stamp-ink: #ffffff;
+  --accent-2: #0e7a5f;
 }
 
 @theme inline {
@@ -21,19 +23,21 @@
   --color-muted: var(--muted);
   --color-stamp: var(--stamp);
   --color-stamp-ink: var(--stamp-ink);
+  --color-accent-2: var(--accent-2);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --background: #12110f;
-    --foreground: #f3efe6;
-    --paper: #1c1a17;
-    --line: #3a342c;
-    --muted: #b7aea2;
-    --stamp: #e4b7ae;
-    --stamp-ink: #1c1915;
+    --background: #071a20;
+    --foreground: #e4f3f4;
+    --paper: #0d242b;
+    --line: #1d4049;
+    --muted: #9bbcc3;
+    --stamp: #62d3d9;
+    --stamp-ink: #04222a;
+    --accent-2: #5fd9a8;
   }
 }
 
@@ -43,24 +47,29 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --background: #12110f;
-  --foreground: #f3efe6;
-  --paper: #1c1a17;
-  --line: #3a342c;
-  --muted: #b7aea2;
-  --stamp: #e4b7ae;
-  --stamp-ink: #1c1915;
+  --background: #071a20;
+  --foreground: #e4f3f4;
+  --paper: #0d242b;
+  --line: #1d4049;
+  --muted: #9bbcc3;
+  --stamp: #62d3d9;
+  --stamp-ink: #04222a;
+  --accent-2: #5fd9a8;
 }
 
 body {
-  background: var(--background);
+  background-color: var(--background);
+  background-image:
+    radial-gradient(60rem 28rem at 88% -8%, color-mix(in srgb, var(--stamp) 16%, transparent), transparent),
+    radial-gradient(48rem 26rem at -8% 2%, color-mix(in srgb, var(--accent-2) 13%, transparent), transparent);
+  background-repeat: no-repeat;
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
 
 .reading-bar {
   height: 2px;
-  background: linear-gradient(90deg, transparent, var(--stamp), transparent);
+  background: linear-gradient(90deg, transparent, var(--stamp), var(--accent-2), transparent);
   background-size: 40% 100%;
   background-repeat: no-repeat;
   animation: reading 1.2s ease-in-out infinite;

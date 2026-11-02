@@ -291,7 +291,10 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
       <div className="mt-8 grid items-start gap-8 sm:mt-10 sm:gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
         <div className="flex flex-col gap-5">
           <h1 className="max-w-xl text-4xl leading-[1.05] font-semibold tracking-tight text-balance sm:text-5xl">
-            A messy page, read cleanly.
+            A messy page,{" "}
+            <span className="bg-linear-to-r from-stamp to-accent-2 bg-clip-text text-transparent">
+              read cleanly.
+            </span>
           </h1>
           <p className="max-w-md text-[15px] leading-relaxed text-muted">
             Upload one JPEG or PNG. SAM 3.1 marks signatures, photos, stamps, or anything you
@@ -580,7 +583,7 @@ export function Cleaner({ apiBase }: { apiBase: string }) {
           <button
             type="submit"
             disabled={!file || status === "loading"}
-            className="w-full rounded-full border border-stamp bg-stamp px-6 py-3 text-sm font-medium text-stamp-ink disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+            className="w-full rounded-full bg-linear-to-r from-stamp to-accent-2 px-6 py-3 text-sm font-medium text-stamp-ink disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
           >
             {status === "loading" ? "Cleaning…" : "Clean screenshot"}
           </button>
