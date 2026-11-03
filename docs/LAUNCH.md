@@ -16,7 +16,7 @@ submission 3 Nov, 4 Nov as buffer.
 | 2 | Live session: real-photo checks and evaluation | You, with photos | 2–3 phone photos of signed pages and 1 with a passport-style photo, no real personal data; a go on more calls | 31 Oct | In Progress | Four-sample run done on 27 Oct with a 40-call cap (all 40 used, none failed): 4 of 4 pages pass; results in the expansion plan §14. Second run on 2 Nov, no photos available, 28 of 35 calls: a generated receipt, F1c, region descriptions and the QR code all pass (§15). Real photos and real signatures stay unmeasured and are left out of the submission claims. |
 | 3 | Deploy a public copy | You | Render and Vercel accounts, the Meta key | 1 Nov | In Progress | Live on 2 Nov: API on Render (Free, by hand), page at `https://dsc-hackathon.vercel.app`. Health, CORS, streaming and the smoke test (4 of 4) pass; see the expansion plan §16. A Pixel 3 click-through with Cancel also passes (§16). The second-network check failed: a phone on another network got 429 while this Mac's limit was tripped, so all visitors share one limit (§16). Limit raised to 10, shared by all visitors, and checked (11th bad upload is 429). A rerun of the smoke test with the receipt passed 5 of 5. Open: the spend alert. |
 | 4 | Demo video and final README | You | Items 2 and 3 done | 2 Nov | In Progress | Shot list in `docs/DEMO.md`. The README has the live link, the results, the hosting section, screenshots in light and dark, and GIFs of the desktop and the Pixel (UI review in the expansion plan §17); `demo/ui-session.webm` is a reference recording. Still to come: your narrated demo video. |
-| 5 | Repo public, About section, submit | You | Items 3 and 4 done | 3 Nov | Not Started | The About text, topics and portal text are drafted in `docs/SUBMISSION.md`, with the commands. The audit found no keys in history and no secret files; the stale branch is fully merged into `main`. The GitHub description still describes the first version until you run them. |
+| 5 | Repo public, About section, submit | You | Items 3 and 4 done | 3 Nov | Not Started | The About text, topics and portal text are drafted in `docs/SUBMISSION.md`, with the commands. The audit found no keys in history and no secret files; the stale branch `old-feature-branch` was fully merged and was deleted on 2 Nov (only `origin/main` is left). The About description, website and topics were updated on 3 Nov; the repository is already public. |
 | 6 | Prompts in one `prompts.py` | You | Nothing | Any time | Done | A pure move: the 13 requests the gateway sends are byte for byte the same as before. See `backend/README.md` (Code layout). |
 
 ## 2. Live session
@@ -96,3 +96,15 @@ Steps:
    used only there (`docs/DEPLOY.md` §5).
 
 Done when: the portal shows the submission.
+
+## Decisions
+
+Questions asked one at a time, each with a recommended answer; the answer is
+recorded here and the docs are updated to match.
+
+| # | Date | Question | Answer | Effect |
+|---|------|----------|--------|--------|
+| 1 | 2 Nov | Narrate the demo video? | Computer voice plus on-screen captions (recommended) | The video is made with Playwright, burned-in captions and a macOS `say` voice-over; the script is in `docs/DEMO.md`. It reads fine on mute, and your own voice can replace the track later. |
+| 2 | 2 Nov | Include the QR-code take? | Yes (recommended) | The video has a second clean on "Invoice with a PAID stamp" with "+ QR code" on (9 more calls, wait cut), spliced into the 25 to 40 s slot; `docs/DEMO.md` no longer calls it optional. |
+| 3 | 2 Nov | Where is the video hosted? | A file in the repo only, no YouTube (your answer; I had recommended unlisted YouTube) | The video is an H.264 `.mp4` in `demo/` (kept under 25 MB, well below GitHub's 100 MB limit), linked from the README and from the portal text as a `github.com/.../blob/main/demo/...` URL. The repo must be public before that link works for judges. If the portal only takes a file upload, upload the same `.mp4`. |
+| 4 | 3 Nov | When do About and public happen? | About text now, repo public only after the video is committed and checked (recommended) | About description, website and topics were set on 3 Nov. The repo turned out to be public already (checked with the personal token and anonymously, HTTP 200), so there is no step to make it public; the video link works as soon as the file is pushed. |

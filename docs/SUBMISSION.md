@@ -55,7 +55,9 @@ Vercel.
 - Repository: https://github.com/vignarajj/dsc_hackathon
 - Live copy: https://dsc-hackathon.vercel.app (it sleeps when idle, so the
   first request can take a minute; it allows 10 requests a minute in total)
-- Demo video: add the link once it is recorded.
+- Demo video: a file in the repo, `demo/final-demo.mp4`
+  (https://github.com/vignarajj/dsc_hackathon/blob/main/demo/final-demo.mp4;
+  the repository is public). Not yet recorded.
 
 **Honest limits** (say these if the form asks):
 
@@ -72,11 +74,11 @@ single command with the personal account's token if you want me to run it, or
 you can use the GitHub settings page.
 
 1. **Spend alert** on the Meta key. Do this before sharing the URL.
-2. **Delete the stale branch**, which holds nothing that `main` lacks:
-   `git push origin --delete old-feature-branch`
-3. **About section**:
+2. ~~Delete the stale branch~~ Done on 2 Nov: `old-feature-branch`
+   held nothing that `main` lacks and is gone from `origin`.
+3. ~~About section~~ Done on 3 Nov (the command, for reference):
    `gh repo edit vignarajj/dsc_hackathon --description "<text above>" --homepage https://dsc-hackathon.vercel.app --add-topic privacy,redaction,pii,structured-extraction`
-4. **Make the repo public**:
+4. ~~Make the repo public~~ Not needed: it was already public on 3 Nov (the command, for reference):
    `gh repo edit vignarajj/dsc_hackathon --visibility public --accept-visibility-change-consequences`
 5. **Submit on the portal** with the text above and the video link.
 6. After judging: suspend the Render service, remove the Vercel project, and

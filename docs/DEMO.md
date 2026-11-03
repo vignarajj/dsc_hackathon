@@ -31,8 +31,8 @@ copy has region descriptions and text hiding in the picture turned off, so the
 | 55 to 75 s | Share-safe tab. Drag the slider. Scroll to the shareable text with `[PHONE]` and `[EMAIL]`. | "One click hides the signature and the photo, strips location and camera data, and masks the personal details in the text." |
 | 75 to 90 s | Back to the top of the page. | "Built for the paperwork in everyone's world." |
 
-Optional second take, if you want to show "SAM finds anything you can name":
-choose "Invoice with a PAID stamp", click "+ QR code", press Clean screenshot,
+Second take (decided 2 Nov, see `docs/LAUNCH.md` Decisions), to show "SAM finds
+anything you can name": choose "Invoice with a PAID stamp", click "+ QR code", press Clean screenshot,
 and show the purple box on the QR code in the Overview. It costs another 9
 calls and 20 to 35 seconds, so cut the wait and splice it into the 25 to 40
 second slot.
@@ -57,8 +57,11 @@ were taken the same day, without the cursor.
 
 ## After recording
 
-Save the file as `demo/final-demo-2.webm` or `.mp4` and tell me. I will link it
-from the README. A phone clip of the same flow, recorded on a Pixel 3, is in
+The video is a file in the repo (decision 3 in `docs/LAUNCH.md`, no YouTube):
+`demo/final-demo.mp4`, H.264, under 25 MB. If you record your own, save it
+under `demo/` and tell me, and I will link it from the README and convert it
+with `ffmpeg -i in.mov -c:v libx264 -crf 28 -vf scale=1920:-2 -an out.mp4`
+(drop `-an` to keep the sound). A phone clip of the same flow, recorded on a Pixel 3, is in
 the README as `docs/phone-demo.gif`.
 
 To cut a GIF of your own from a recording (change the times and the width):
