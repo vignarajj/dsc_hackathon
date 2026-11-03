@@ -57,7 +57,7 @@ Vercel.
   first request can take a minute; it allows 10 requests a minute in total)
 - Demo video: a file in the repo, `demo/final-demo.mp4`
   (https://github.com/vignarajj/dsc_hackathon/blob/main/demo/final-demo.mp4;
-  the repository is public). Not yet recorded.
+  the repository is public). Recorded on 3 Nov: 62 seconds, captions and a computer voice, the signed form and then the invoice with a QR code.
 
 **Honest limits** (say these if the form asks):
 

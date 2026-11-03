@@ -11,6 +11,8 @@ It was built for the Meta Global AI Developer Hackathon, Indie track, on the the
 
 **Try it:** https://dsc-hackathon.vercel.app is a public test copy (the page on Vercel, the API on Render's Free plan). The API sleeps when idle, so the first request after a quiet spell can take a minute. The copy allows 10 requests a minute across all visitors, has region descriptions and text hiding in the picture turned off, and comes down after judging.
 
+**Demo video** (62 seconds, with captions and a computer voice-over): [demo/final-demo.mp4](demo/final-demo.mp4). It cleans the signed form, then the invoice with a QR code added, on the public copy; the waits are sped up.
+
 On a phone (a Pixel 3, sped up): pick the signed form, clean it, compare the share-safe copy, where the photo and the signature are hidden, then switch the theme from dark to light.
 
 ![A clean on a Pixel 3: choose the signed form, clean it, then drag the share-safe slider](docs/phone-demo.gif)
@@ -63,6 +65,7 @@ A 38 second recording of the same desktop session is `demo/ui-session.webm`.
 | `frontend/e2e/` | Playwright tests of the built page against the fake API. |
 | `Document_Screenshot_Cleaner_SAM_Hackathon_Plan.md` | The original plan, phase tracker, and the F0 spike results (§5.1). |
 | `Feature_Expansion_Plan.md` | The feature expansion plan and its status tracker (§13). |
+| `demo/final-demo.mp4` | The narrated 62 second demo video (captions, computer voice-over, waits sped up), recorded on the public copy on 3 Nov. |
 | `demo/final-demo.webm`, `demo/happy-path.webm` | Earlier recordings, made before the feature expansion and the new look. |
 | `demo/ui-session.webm` | A 38 second desktop session on the public copy with the current page. |
 | `docs/screenshot.png`, `docs/screenshots/` | The upload page, shown at the top of this file, and the screenshots in the Screenshots section. |

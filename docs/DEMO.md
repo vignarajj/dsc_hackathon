@@ -55,6 +55,10 @@ were taken the same day, without the cursor.
 - **A long wait on the first clean**: the instance was asleep. Reload and retry.
 - **No result after 3 minutes**: the page gives up and offers Try again.
 
+## The recorded video
+
+`demo/final-demo.mp4` (3 Nov): 62 seconds on the public copy, 1280x720, captions drawn on the page, a macOS `say` voice (Flo) laid over it, and the two waits sped up 10 times. It follows the shot list above, drops the Download JSON click's file from view, skips the 75 to 90 s "back to top" in favour of a short closing line, and adds the QR take after the Share-safe tab. It used about 18 Meta calls. To make a new one, record again against the public copy and keep it under 25 MB.
+
 ## After recording
 
 The video is a file in the repo (decision 3 in `docs/LAUNCH.md`, no YouTube):
